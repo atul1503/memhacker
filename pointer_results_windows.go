@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -31,94 +32,183 @@ type SavedChain struct {
 	ExpectedValue string   `json:"expected_value"` // value at time of prsave
 }
 
-func chainToSaved(c PointerChain, label string) SavedChain {
-	offsets := make([]string, len(c.Offsets))
-	for i, o := range c.Offsets {
-		signed := int64(o)
-		if signed < 0 {
-			offsets[i] = fmt.Sprintf("-%X", uint64(-signed))
-		} else {
-			offsets[i] = fmt.Sprintf("+%X", o)
-		}
+// formatHexOffset formats a uintptr offset as a signed hex literal: "0x1A0" or "-0x1A0".
+// No quotes — meant to be embedded as a raw JSON token (non-strict JSON).
+func formatHexOffset(o uintptr) string {
+	signed := int64(o)
+	if signed < 0 {
+		return fmt.Sprintf("-0x%X", uint64(-signed))
 	}
-	return SavedChain{
-		BaseModule: c.BaseModule,
-		BaseOffset: fmt.Sprintf("%X", c.BaseOffset),
-		Offsets:    offsets,
-		Label:      label,
+	return fmt.Sprintf("0x%X", o)
+}
+
+// parseHexOffset parses a hex string written by formatHexOffset OR any legacy
+// format: "1A0", "+1A0", "-1A0", "0x1A0", "-0x1A0", with or without surrounding spaces.
+func parseHexOffset(s string) uintptr {
+	s = strings.TrimSpace(s)
+	negative := strings.HasPrefix(s, "-")
+	s = strings.TrimPrefix(s, "-")
+	s = strings.TrimPrefix(s, "+")
+	s = strings.TrimPrefix(s, "0x")
+	s = strings.TrimPrefix(s, "0X")
+	var v uint64
+	fmt.Sscanf(s, "%X", &v)
+	if negative {
+		return uintptr(^v + 1) // two's complement
 	}
+	return uintptr(v)
 }
 
 func savedToChain(s SavedChain) (PointerChain, error) {
-	var baseOffset uint64
-	fmt.Sscanf(s.BaseOffset, "%X", &baseOffset)
-
 	offsets := make([]uintptr, len(s.Offsets))
 	for i, o := range s.Offsets {
-		o = strings.TrimSpace(o)
-		negative := strings.HasPrefix(o, "-")
-		o = strings.TrimPrefix(o, "-")
-		o = strings.TrimPrefix(o, "+")
-		var v uint64
-		fmt.Sscanf(o, "%X", &v)
-		if negative {
-			offsets[i] = uintptr(^v + 1) // two's complement
-		} else {
-			offsets[i] = uintptr(v)
-		}
+		offsets[i] = parseHexOffset(o)
 	}
 	return PointerChain{
 		BaseModule: s.BaseModule,
-		BaseOffset: uintptr(baseOffset),
+		BaseOffset: parseHexOffset(s.BaseOffset),
 		Offsets:    offsets,
 	}, nil
 }
 
-// SavePointerResults saves pscan results to a JSON file
-func SavePointerResults(path string, results []PointerResult, gameExe string, is32Bit bool, dt DataType, handle windows.Handle, modules []ModuleInfo) error {
-	chains := make([]SavedChain, len(results))
-	for i, r := range results {
-		sc := chainToSaved(r.Chain, r.Label)
-		// Read current value at this chain's address so we can verify later
-		if handle != 0 {
-			addr, ok := VerifyChain(handle, modules, r.Chain, is32Bit)
-			if ok {
-				val, err := ReadMemory(handle, addr, dataTypeSize(dt))
-				if err == nil {
-					sc.ExpectedValue = decodeValue(dt, val)
-				}
+// quoteHexLiterals wraps unquoted hex literals (`0x1A0`, `-0x1A0`) in double quotes
+// so encoding/json can parse the file. State-machine over the bytes — does not
+// touch text inside existing string literals.
+func quoteHexLiterals(data []byte) []byte {
+	var out bytes.Buffer
+	out.Grow(len(data) + 32)
+	inString := false
+	escape := false
+	isHex := func(c byte) bool {
+		return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+	}
+	i := 0
+	for i < len(data) {
+		c := data[i]
+		if inString {
+			out.WriteByte(c)
+			if escape {
+				escape = false
+			} else if c == '\\' {
+				escape = true
+			} else if c == '"' {
+				inString = false
 			}
+			i++
+			continue
 		}
-		chains[i] = sc
+		if c == '"' {
+			inString = true
+			out.WriteByte(c)
+			i++
+			continue
+		}
+		// Look for: optional '-', then '0x', then hex digits.
+		start := i
+		end := i
+		if c == '-' && end+2 < len(data) && data[end+1] == '0' && (data[end+2] == 'x' || data[end+2] == 'X') {
+			end += 3
+		} else if c == '0' && end+1 < len(data) && (data[end+1] == 'x' || data[end+1] == 'X') {
+			end += 2
+		} else {
+			out.WriteByte(c)
+			i++
+			continue
+		}
+		for end < len(data) && isHex(data[end]) {
+			end++
+		}
+		if end-start <= 2 || (data[start] == '-' && end-start <= 3) {
+			out.WriteByte(c)
+			i++
+			continue
+		}
+		out.WriteByte('"')
+		out.Write(data[start:end])
+		out.WriteByte('"')
+		i = end
 	}
-	prf := PointerResultsFile{
-		Version:  AppVersion,
-		SavedAt:  time.Now(),
-		GameExe:  gameExe,
-		Is32Bit:  is32Bit,
-		DataType: dataTypeName(dt),
-		Chains:   chains,
-	}
+	return out.Bytes()
+}
+
+// SavePointerResults writes strict JSON with hex-prefixed strings for addresses:
+//   "base_offset": "0xA945820",
+//   "offsets":     ["0xD8", "0xB0", "0x0", "-0x1A0"]
+// Strip the quotes when pasting into a Python tuple — `0x...` parses natively.
+// We hand-roll the writer to keep offsets on one line (easier to copy).
+func SavePointerResults(path string, results []PointerResult, gameExe string, is32Bit bool, dt DataType, handle windows.Handle, modules []ModuleInfo) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	enc := json.NewEncoder(f)
-	enc.SetIndent("", "  ")
-	return enc.Encode(prf)
+
+	jsonStr := func(s string) string {
+		b, _ := json.Marshal(s)
+		return string(b)
+	}
+
+	fmt.Fprintln(f, "{")
+	fmt.Fprintf(f, "  \"version\": %s,\n", jsonStr(AppVersion))
+	fmt.Fprintf(f, "  \"saved_at\": %s,\n", jsonStr(time.Now().Format(time.RFC3339)))
+	fmt.Fprintf(f, "  \"game_exe\": %s,\n", jsonStr(gameExe))
+	fmt.Fprintf(f, "  \"is_32bit\": %t,\n", is32Bit)
+	fmt.Fprintf(f, "  \"data_type\": %s,\n", jsonStr(dataTypeName(dt)))
+	fmt.Fprintln(f, "  \"chains\": [")
+
+	for i, r := range results {
+		expectedValue := ""
+		if handle != 0 {
+			addr, ok := VerifyChain(handle, modules, r.Chain, is32Bit)
+			if ok {
+				val, err := ReadMemory(handle, addr, dataTypeSize(dt))
+				if err == nil {
+					expectedValue = decodeValue(dt, val)
+				}
+			}
+		}
+
+		fmt.Fprintln(f, "    {")
+		fmt.Fprintf(f, "      \"base_module\": %s,\n", jsonStr(r.Chain.BaseModule))
+		fmt.Fprintf(f, "      \"base_offset\": \"0x%X\",\n", r.Chain.BaseOffset)
+		fmt.Fprint(f, "      \"offsets\": [")
+		for j, o := range r.Chain.Offsets {
+			if j > 0 {
+				fmt.Fprint(f, ", ")
+			}
+			fmt.Fprintf(f, "%q", formatHexOffset(o))
+		}
+		fmt.Fprintln(f, "],")
+		fmt.Fprintf(f, "      \"label\": %s,\n", jsonStr(r.Label))
+		fmt.Fprintf(f, "      \"notes\": %s,\n", jsonStr(""))
+		fmt.Fprintf(f, "      \"expected_value\": %s\n", jsonStr(expectedValue))
+
+		if i < len(results)-1 {
+			fmt.Fprintln(f, "    },")
+		} else {
+			fmt.Fprintln(f, "    }")
+		}
+	}
+
+	fmt.Fprintln(f, "  ]")
+	fmt.Fprintln(f, "}")
+	return nil
 }
 
-// LoadPointerResults loads saved pscan results from a JSON file
+// LoadPointerResults loads saved pscan results. Accepts both the new hex-literal
+// format and any legacy file (strict JSON with string offsets).
 func LoadPointerResults(path string) (*PointerResultsFile, []PointerChain, error) {
-	f, err := os.Open(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, nil, err
 	}
-	defer f.Close()
+
+	// Preprocess: wrap unquoted hex literals in quotes so encoding/json accepts them.
+	// Legacy files (no unquoted hex) pass through unchanged.
+	data = quoteHexLiterals(data)
 
 	var prf PointerResultsFile
-	if err := json.NewDecoder(f).Decode(&prf); err != nil {
+	if err := json.Unmarshal(data, &prf); err != nil {
 		return nil, nil, fmt.Errorf("invalid results file: %v", err)
 	}
 
