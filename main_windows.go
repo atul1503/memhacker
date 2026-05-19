@@ -39,16 +39,6 @@ type addressEntry struct {
 }
 
 func main() {
-	// Disable QuickEdit Mode — prevents Windows from pausing the process
-	// when user clicks on the console window (would freeze scans mid-run)
-	if hIn, err := windows.GetStdHandle(windows.STD_INPUT_HANDLE); err == nil {
-		var mode uint32
-		if windows.GetConsoleMode(hIn, &mode) == nil {
-			const ENABLE_QUICK_EDIT = 0x0040
-			windows.SetConsoleMode(hIn, mode&^ENABLE_QUICK_EDIT)
-		}
-	}
-
 	// Init logger — writes to memhacker.log next to the exe
 	logPath := "memhacker.log"
 	if err := InitLogger(logPath, LogDEBUG, true); err != nil {
@@ -565,6 +555,25 @@ func parseScanArgs(scanType string, args []string) (ScanParams, bool) {
 	return p, true
 }
 
+// Toggle Windows console QuickEdit mode.
+// off=true disables QuickEdit (prevents click-to-pause during long scans).
+// off=false restores QuickEdit so user can select/copy/paste between scans.
+const ENABLE_QUICK_EDIT = 0x0040
+const ENABLE_EXTENDED_FLAGS = 0x0080
+
+func setQuickEdit(on bool) {
+	hIn, err := windows.GetStdHandle(windows.STD_INPUT_HANDLE)
+	if err != nil { return }
+	var mode uint32
+	if windows.GetConsoleMode(hIn, &mode) != nil { return }
+	if on {
+		mode |= ENABLE_QUICK_EDIT | ENABLE_EXTENDED_FLAGS
+	} else {
+		mode = (mode &^ ENABLE_QUICK_EDIT) | ENABLE_EXTENDED_FLAGS
+	}
+	windows.SetConsoleMode(hIn, mode)
+}
+
 func cmdScan(args []string, reader *bufio.Reader) {
 	if currentHandle == 0 {
 		fmt.Println("Not attached. Use 'open <pid>'")
@@ -633,6 +642,7 @@ func cmdScan(args []string, reader *bufio.Reader) {
 	if rangeLo > 0 { info += fmt.Sprintf(" range=0x%X-0x%X", rangeLo, rangeHi) }
 	if resultCap > 0 { info += fmt.Sprintf(" cap=%d", resultCap) }
 	fmt.Printf("Scanning for %s [%s]...\n", args[0], info)
+	setQuickEdit(false); defer setQuickEdit(true)
 	start := time.Now()
 	count := scanner.FirstScan(p)
 	elapsed := time.Since(start)
@@ -662,6 +672,7 @@ func cmdNext(args []string, reader *bufio.Reader) {
 		return
 	}
 	fmt.Printf("Filtering %d results...\n", scanner.totalResults())
+	setQuickEdit(false); defer setQuickEdit(true)
 	start := time.Now()
 	count := scanner.NextScan(p)
 	elapsed := time.Since(start)
@@ -1092,6 +1103,7 @@ func cmdBuildPointerMap() {
 		return
 	}
 	fmt.Println("Building pointer map (this may take a while)...")
+	setQuickEdit(false); defer setQuickEdit(true)
 	start := time.Now()
 	pm, err := BuildPointerMap(currentHandle, currentModules, currentPID, currentIs32Bit)
 	if err != nil {
@@ -1339,6 +1351,7 @@ func cmdPointerScan(args []string, reader *bufio.Reader) {
 		fmt.Printf("  [%d] %s -> target=0x%X (%d pmap entries)\n", i+1, s.Label, s.PMap.TargetAddr, len(s.PMap.Entries))
 	}
 
+	setQuickEdit(false); defer setQuickEdit(true)
 	start := time.Now()
 	results := MultiSessionPointerScan(PointerScanConfig{
 		Sessions:          pscanSessions,
