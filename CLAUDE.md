@@ -264,8 +264,9 @@ Uses **semver** (MAJOR.MINOR.PATCH). AppVersion is in `logger.go`.
 | v2.2.0 | Disk-backed scan results (unknown scan snapshot + all results >1M to disk), CE page-grouping NextScan, gap-based address grouping, scan progress output, writable-only scan default, region filter, scan range/cap/all keywords, iread/iwrite/ifreeze commands, sortable results, position-based unfreeze, unfreeze all/by-address, scan confirmation guard, Ctrl+C cancel, results index display, regions command, CHANGED status in prverify, no VirtualProtectEx (direct write only), freeze silently handles failures. Verified on a popular racing game (open world, 64-bit). |
 
 | v2.3.0 | pmexport CE-compatible .scandata format, prmerge offline cross-session intersection, parallel pscan session fix (skip 0-chain sessions), game scripts folder (car speed rotator + drift), iread command, prlist shows live values, disk-backed scan results improvements |
+| v2.4.0-alpha | pscan `neg` keyword — CE's NegativeOffsets flag (also scans pointers whose value lands past the target). Use when normal scans return zero chains even with high offset. QuickEdit auto-toggle: disabled during long ops (scan/next/pmap/pscan), restored after — copy/paste still works at the prompt. pmload now loads ALL files passed (was only loading first arg). Car rotator script tuned for Forza H6 (20Hz, exponential decay, anti-windup clamp). |
 
-Current: **v2.3.0** (AppVersion in `logger.go`)
+Current: **v2.4.0-alpha** (AppVersion in `logger.go`)
 
 ---
 

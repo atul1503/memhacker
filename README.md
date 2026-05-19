@@ -1,4 +1,4 @@
-# MemHacker v2.2.0
+# MemHacker v2.4.0-alpha
 
 A Cheat Engine alternative written in Go — memory scanner, CE-style multi-session pointer scan, value freeze.
 
@@ -146,7 +146,7 @@ CE-style multi-session pointer scan. Find stable pointer chains that survive gam
 #### Running pscan
 
 ```
-pscan [depth] [offset] [max] [filter] [maxOffsets]
+pscan [depth] [offset] [max] [filter] [maxOffsets] [neg]
 ```
 
 | Arg | Default | Description |
@@ -156,10 +156,13 @@ pscan [depth] [offset] [max] [filter] [maxOffsets]
 | `max` | `100` | Max chains to return |
 | `filter` | `exe` | `exe` = main exe only, `game` = all game DLLs, `all` = everything |
 | `maxOffsets` | `5` | Max offset groups per node (CE default) |
+| `neg` | off | Enable negative offsets (CE's NegativeOffsets). Try when normal scans return zero chains even with high offset. Slower. |
 
 **Multiple sessions run in parallel** — total time = slowest session, not sum.
 
 After pscan, results are **automatically saved** to `pscan_last_N.json` (never overwrites). Only chains that currently resolve in the live process are shown.
+
+**`neg` keyword:** by default pointer scans only consider pointers whose value lands at or before the target (positive offsets). Some game builds need pointers whose value lands *past* the target (negative offsets). Append `neg` anywhere in args to enable both directions, e.g. `pscan 5 8192 100 exe 5 neg`.
 
 ---
 

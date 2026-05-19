@@ -277,11 +277,12 @@ POINTER SCANNING
   pmsessions                    - list sessions
   pmclear                       - clear all sessions
 
-  pscan [depth] [offset] [max] [filter] [maxOffsets]
+  pscan [depth] [offset] [max] [filter] [maxOffsets] [neg]
                                 - scan across all sessions (sessions run in parallel)
                                   filter: exe (default), game, all
                                   defaults: depth=5 offset=8192 max=100
-                                  e.g: pscan 5 4000 100   pscan 6 8192 100 game
+                                  neg: enable negative offsets (CE NegativeOffsets) — try when 0 chains
+                                  e.g: pscan 5 4000 100   pscan 6 8192 100 game   pscan 5 8192 100 exe 5 neg
   (results auto-saved to pscan_last_N.json, only verified chains shown)
 
 POINTER RESULTS
@@ -1322,6 +1323,18 @@ func cmdPointerScan(args []string, reader *bufio.Reader) {
 		return
 	}
 
+	// Strip optional "neg" keyword (enables negative offsets, CE's NegativeOffsets flag)
+	negativeOffsets := false
+	filtered := args[:0:len(args)]
+	for _, a := range args {
+		if strings.ToLower(a) == "neg" {
+			negativeOffsets = true
+		} else {
+			filtered = append(filtered, a)
+		}
+	}
+	args = filtered
+
 	depth := 5
 	maxOffset := uintptr(8192)
 	maxResults := 100
@@ -1345,8 +1358,10 @@ func cmdPointerScan(args []string, reader *bufio.Reader) {
 		maxOffsetsPerNode, _ = strconv.Atoi(args[4])
 	}
 
-	fmt.Printf("Running pointer scan across %d session(s): depth=%d maxOffset=0x%X maxResults=%d\n",
-		len(pscanSessions), depth, maxOffset, maxResults)
+	negLabel := ""
+	if negativeOffsets { negLabel = " neg" }
+	fmt.Printf("Running pointer scan across %d session(s): depth=%d maxOffset=0x%X maxResults=%d%s\n",
+		len(pscanSessions), depth, maxOffset, maxResults, negLabel)
 	for i, s := range pscanSessions {
 		fmt.Printf("  [%d] %s -> target=0x%X (%d pmap entries)\n", i+1, s.Label, s.PMap.TargetAddr, len(s.PMap.Entries))
 	}
@@ -1360,6 +1375,7 @@ func cmdPointerScan(args []string, reader *bufio.Reader) {
 		MaxResults:        maxResults,
 		BaseFilter:        baseFilter,
 		MaxOffsetsPerNode: maxOffsetsPerNode,
+		NegativeOffsets:   negativeOffsets,
 		DT:                currentDT,
 	})
 	elapsed := time.Since(start)
