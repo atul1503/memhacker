@@ -94,6 +94,19 @@ STEER_DAMP        = 1.1
 # Cap on |steer|. Prevents holding a key from winding up to absurd values.
 STEER_MAX         = 2.0
 
+# Steer reversal — when you press LEFT while steering right (or vice versa),
+# crush the existing steer back toward 0 using exponential decay first, then
+# switch to linear stepping once we're near 0. Reversal feels much snappier.
+# Set False to use plain linear step the whole way (old behavior).
+STEER_REVERSAL_ENABLED   = True
+# Divisor used during reversal. Bigger = faster snap to 0 on direction change.
+# Independent from STEER_DAMP so you can tune reversal harder than auto-center.
+STEER_REVERSAL_DAMP      = 1.1
+# Below this |steer| during reversal, switch from divide to linear step.
+# Math crossover for default settings is 1.1 (= STEER_KEY_STEP / (1 - 1/STEER_REVERSAL_DAMP)).
+# Past that point linear is actually faster than exponential, so we switch.
+STEER_REVERSAL_THRESHOLD = 1.1
+
 # Speed keys (multiplicative per tick)
 SPEED_BOOST_MULT  = 1.01   # UP arrow
 SPEED_BRAKE_MULT  = 0.97   # DOWN arrow
@@ -252,9 +265,17 @@ def update_keyboard_steer(current_steer):
     right = key_down(VK_RIGHT)
 
     if left and not right:
-        new_steer = current_steer - STEER_KEY_STEP
+        # Reversal: still steering RIGHT (positive). Damp toward 0 while we're
+        # far from zero (exp wins), then linear step into LEFT (linear wins near 0).
+        if STEER_REVERSAL_ENABLED and current_steer > STEER_REVERSAL_THRESHOLD:
+            new_steer = current_steer / STEER_REVERSAL_DAMP
+        else:
+            new_steer = current_steer - STEER_KEY_STEP
     elif right and not left:
-        new_steer = current_steer + STEER_KEY_STEP
+        if STEER_REVERSAL_ENABLED and current_steer < -STEER_REVERSAL_THRESHOLD:
+            new_steer = current_steer / STEER_REVERSAL_DAMP
+        else:
+            new_steer = current_steer + STEER_KEY_STEP
     else:
         new_steer = current_steer / STEER_DAMP
         if abs(new_steer) < 0.001:
