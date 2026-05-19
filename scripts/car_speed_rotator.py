@@ -1,16 +1,43 @@
 """
-Car Speed Rotator + Drift Script — Forza Horizon 6
-----------------------------------------------------
-Two modes:
-  python car_speed_rotator.py          → ROTATE mode (default)
-  python car_speed_rotator.py drift    → DRIFT mode
+Car Speed Rotator — modifies car velocity via pointer chain at 20Hz.
 
-Keyboard controls (work in both modes):
-  LEFT  arrow → steer -= STEER_KEY_STEP  (turn left)
-  RIGHT arrow → steer += STEER_KEY_STEP  (turn right)
-  No key      → steer gradually returns to 0 (auto-center)
+Modes:
+  python car_speed_rotator.py          → ROTATE (turns the car by rotating its velocity vector)
+  python car_speed_rotator.py drift    → DRIFT  (adds sideways velocity, light rotation mix)
+
+Keyboard (both modes):
+  LEFT / RIGHT  steer left / right
+  UP   / DOWN   boost / brake speed
+  no key        steer auto-centers
 
 Run as Administrator.
+
+============================================================
+SETUP FOR A NEW GAME — what to change in the CONFIG block
+============================================================
+
+1) PROCESS_NAME
+   Set to the game's exe name (e.g. "needforspeed.exe").
+
+2) Z_SPEED_CHAIN — find a stable pointer chain to the Z velocity float:
+     - In memhacker: open <game.exe>
+     - Scan for Z velocity (drive forward, scan changed/increased until 1-2 addrs)
+     - pmsave s1.pmap <addr>, restart game, repeat for s2/s3
+     - pscan, prsave chains.json
+     - Pick a chain that survives restarts and paste as:
+         ("game.exe", baseOffset, [off1, off2, ...])
+
+3) X_SPEED_OFFSET / Y_SPEED_OFFSET / STEER_OFFSET — offsets RELATIVE to Z addr:
+     - Velocity is almost always a float[3] {X, Y, Z}, so X = Z-8, Y = Z-4.
+     - STEER varies per game — scan a float that changes when you turn the
+       wheel, then compute (steer_addr - z_addr).
+
+4) STEER_SENSITIVITY (ROTATE mode)
+     - Start at -0.0349 (CE default for a 60Hz tick). For 20Hz like ours, try
+       -0.03 to -0.05. Flip the sign if the car turns the wrong way.
+
+5) Launch the game and run the script. Tap LEFT / RIGHT gently — if the car
+   over-rotates, lower |STEER_SENSITIVITY|; if it barely turns, raise it.
 """
 
 import ctypes
@@ -21,11 +48,14 @@ import struct
 import sys
 
 # =============================================================================
-# CONFIG — your actual values
+# CONFIG
 # =============================================================================
 
+# Target process exe name (must match what shows in Task Manager).
 PROCESS_NAME = "forzahorizon6.exe"
 
+# Pointer chain to the Z velocity float: (module, baseOffset, [offsets...]).
+# Resolved each tick; if it breaks the script idles until it comes back.
 Z_SPEED_CHAIN = ("forzahorizon6.exe", 0xA945820, [
     0xD8,
     0xB0,
@@ -33,31 +63,43 @@ Z_SPEED_CHAIN = ("forzahorizon6.exe", 0xA945820, [
     0x28
 ])
 
-X_SPEED_OFFSET = -8    # X is 2 floats before Z
-Y_SPEED_OFFSET = -4    # Y is 1 float before Z
-Z_SPEED_OFFSET =  0    # Z is at resolved address
-STEER_OFFSET   = 12    # steer is 3 floats after Z
+# Byte offsets of the X / Y / Z / steer floats relative to the resolved Z addr.
+# Velocity is almost always a float[3], so X = Z-8 and Y = Z-4. STEER varies.
+X_SPEED_OFFSET = -8
+Y_SPEED_OFFSET = -4
+Z_SPEED_OFFSET =  0
+STEER_OFFSET   = 12
 
-# --- ROTATE mode ---
-# Forza tuning: negative (inverted convention) and CE default divided by 1.1
-STEER_SENSITIVITY = -0.03173  # radians per steer unit per tick (= -0.0349 / 1.1, Forza)
+# ROTATE mode
+# Radians to rotate the velocity vector per (steer unit × tick). Negative if
+# the game's steer convention is inverted. Raise |value| to turn faster.
+STEER_SENSITIVITY = -0.03173
+# Ignore steer values below this magnitude. 0.0 = always rotate if any steer.
 DEAD_ZONE         = 0.0
 
-# --- DRIFT mode ---
+# DRIFT mode
+# How much sideways velocity is added per steer unit.
 DRIFT_LATERAL_STRENGTH = 5.0
+# How much the velocity vector is also rotated (mixes drift + turn). 0 = pure slide.
 DRIFT_ROTATE_MIX       = 0.03
+# Don't drift below this speed (avoids weird behavior when stopped).
 DRIFT_SPEED_MIN        = 2.0
 
-# --- Keyboard steering ---
-STEER_KEY_STEP    = 0.1    # steer changes per tick while key held
-STEER_DAMP        = 1.1    # exponential decay divisor when no key pressed
-STEER_MAX         = 2.0    # max steer magnitude — prevents wind-up
+# Keyboard steering
+# Steer value change per tick while LEFT/RIGHT is held.
+STEER_KEY_STEP    = 0.1
+# Auto-center divisor per tick when no key is held (exponential decay).
+# Larger = faster centering. 1.0 = no decay.
+STEER_DAMP        = 1.1
+# Cap on |steer|. Prevents holding a key from winding up to absurd values.
+STEER_MAX         = 2.0
 
-# --- Speed boost/brake (per tick at 20Hz) ---
-SPEED_BOOST_MULT  = 1.01   # UP arrow: 1.01 per tick = +22% per second
-SPEED_BRAKE_MULT  = 0.97   # DOWN arrow: matches CE's accelFactor * 1.02 brake formula
+# Speed keys (multiplicative per tick)
+SPEED_BOOST_MULT  = 1.01   # UP arrow
+SPEED_BRAKE_MULT  = 0.97   # DOWN arrow
 
-UPDATE_HZ = 20             # CE-style 50ms ticks — gentler than 60Hz, gives game physics time
+# Tick rate. 20Hz = 50ms per tick.
+UPDATE_HZ = 20
 
 # =============================================================================
 # Windows API
@@ -167,7 +209,6 @@ def resolve_chain(handle, module_base, base_offset, offsets):
     return addr
 
 def key_down(vk):
-    """Non-blocking key state check using GetAsyncKeyState."""
     return bool(user32.GetAsyncKeyState(vk) & 0x8000)
 
 def normalize_speed(new_vx, new_vz, original_speed):
@@ -196,7 +237,6 @@ def lateral_vector(vx, vz):
 # =============================================================================
 
 def apply_speed_keys(handle, z_addr, vx, vz):
-    """UP = boost speed, DOWN = reduce speed."""
     up   = key_down(VK_UP)
     down = key_down(VK_DOWN)
     if not up and not down:
@@ -205,16 +245,9 @@ def apply_speed_keys(handle, z_addr, vx, vz):
     if speed < 0.001:
         return vx, vz
     mult = SPEED_BOOST_MULT if up else SPEED_BRAKE_MULT
-    scale = (speed * mult) / speed
-    return vx * scale, vz * scale
+    return vx * mult, vz * mult
 
 def update_keyboard_steer(current_steer):
-    """
-    Read LEFT/RIGHT keys and update steer value.
-    LEFT  → steer - STEER_KEY_STEP
-    RIGHT → steer + STEER_KEY_STEP
-    None  → gradually return to 0
-    """
     left  = key_down(VK_LEFT)
     right = key_down(VK_RIGHT)
 
@@ -223,12 +256,10 @@ def update_keyboard_steer(current_steer):
     elif right and not left:
         new_steer = current_steer + STEER_KEY_STEP
     else:
-        # Auto-center: exponential decay toward 0 (smooth fall-off, fast from large values)
         new_steer = current_steer / STEER_DAMP
         if abs(new_steer) < 0.001:
             new_steer = 0.0
 
-    # Clamp to ±STEER_MAX — prevents wind-up
     if new_steer > STEER_MAX: new_steer = STEER_MAX
     if new_steer < -STEER_MAX: new_steer = -STEER_MAX
     return new_steer
@@ -321,19 +352,14 @@ def main():
                 time.sleep(1.0)
                 continue
 
-            # Update steer from keyboard
             steer = update_keyboard_steer(steer)
-
-            # Write steer value to game memory
             write_float(handle, z_addr + STEER_OFFSET, steer)
 
-            # Apply velocity modification
             if mode == "drift":
                 status = run_drift(handle, z_addr, steer)
             else:
                 status = run_rotate(handle, z_addr, steer)
 
-            # UP/DOWN arrow: boost or reduce speed
             vx = read_float(handle, z_addr + X_SPEED_OFFSET)
             vz = read_float(handle, z_addr + Z_SPEED_OFFSET)
             new_vx, new_vz = apply_speed_keys(handle, z_addr, vx, vz)
