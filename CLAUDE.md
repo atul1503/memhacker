@@ -269,8 +269,9 @@ Uses **semver** (MAJOR.MINOR.PATCH). AppVersion is in `logger.go`.
 | v2.4.2-alpha | Car rotator: hybrid steer reversal (exp-then-linear). Pressing the opposite arrow now damps existing steer toward 0 exponentially while \|steer\| > threshold, then linear-steps into the new direction once near 0 — much snappier direction changes. Configurable via STEER_REVERSAL_{ENABLED,DAMP,THRESHOLD}. |
 | v2.4.3-alpha | prsave JSON: addresses now stored as hex-prefix strings (`"0x1A0"`, `"-0x1A0"`) instead of plain hex without prefix (`"1A0"`, `"+1A0"`). Strip quotes to paste straight into Python tuples. File stays strict-JSON valid. Loader also accepts the legacy format AND raw (unquoted) hex literals via a quote-wrapping preprocessor. |
 | v2.4.4-alpha | Car rotator: additive steer mode (default). New STEER_WRITE_MODE="add" reads game's current steer and writes (game+script), so your wheel/controller still works — script just nudges on top. When script is idle (|steer|<0.001) it doesn't write at all. Set to "set" for old override behavior. Velocity rotation always uses script-only steer regardless of mode. |
+| v2.4.5-alpha | Car rotator: clamp the combined (game_steer + script_steer) value to ±STEER_MAX before writing in "add" mode, so saturated controller input + script keys can't push the written value past the cap. |
 
-Current: **v2.4.4-alpha** (AppVersion in `logger.go`)
+Current: **v2.4.5-alpha** (AppVersion in `logger.go`)
 
 ---
 

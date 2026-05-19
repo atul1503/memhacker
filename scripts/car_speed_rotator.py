@@ -130,8 +130,11 @@ STEER_KEY_STEP    = 0.1
 STEER_DAMP        = 1.1
 
 # STEER_MAX
-#   Hard cap on |steer|. Without this, holding LEFT for 10 seconds would push
-#   steer to a huge number, and on release it would take forever to decay back.
+#   Hard cap on |steer|. Applies to:
+#     - the script's internal steer (prevents wind-up from holding a key)
+#     - the velocity rotation (which uses script_steer × STEER_SENSITIVITY)
+#     - the final value written to game memory in "add" mode
+#       (i.e. game_steer + script_steer is clamped to ±STEER_MAX before write).
 #   2.0 means the car can over-saturate beyond the natural [-1,1] range but
 #   not by much.
 STEER_MAX         = 2.0
@@ -462,7 +465,10 @@ def main():
             if STEER_WRITE_MODE == "add":
                 if abs(steer) > 0.001:
                     game_steer = read_float(handle, z_addr + STEER_OFFSET)
-                    write_float(handle, z_addr + STEER_OFFSET, game_steer + steer)
+                    combined = game_steer + steer
+                    if combined >  STEER_MAX: combined =  STEER_MAX
+                    if combined < -STEER_MAX: combined = -STEER_MAX
+                    write_float(handle, z_addr + STEER_OFFSET, combined)
             else:
                 write_float(handle, z_addr + STEER_OFFSET, steer)
 
