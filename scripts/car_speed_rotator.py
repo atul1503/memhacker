@@ -136,6 +136,19 @@ STEER_DAMP        = 1.1
 #   not by much.
 STEER_MAX         = 2.0
 
+# STEER_WRITE_MODE
+#   How the script's steer value interacts with the game's own steer input:
+#     "add" — read the game's current steer and write (game + script). Your
+#             wheel/controller/in-game keys still work; the script just nudges
+#             on top. When the script is idle (|steer|<0.001) we don't write
+#             at all, leaving the game's value completely untouched.
+#     "set" — overwrite the game's value with the script's `steer` every tick.
+#             Script fully owns steering; game input is ignored.
+#   Note: regardless of mode, velocity rotation in run_rotate / run_drift
+#   uses only the script's `steer` — so the rotator effect always adds on top
+#   of the game's natural physics.
+STEER_WRITE_MODE  = "add"
+
 # -----------------------------------------------------------------------------
 # Steer reversal (hybrid exponential → linear when changing direction)
 # -----------------------------------------------------------------------------
@@ -445,7 +458,13 @@ def main():
                 continue
 
             steer = update_keyboard_steer(steer)
-            write_float(handle, z_addr + STEER_OFFSET, steer)
+
+            if STEER_WRITE_MODE == "add":
+                if abs(steer) > 0.001:
+                    game_steer = read_float(handle, z_addr + STEER_OFFSET)
+                    write_float(handle, z_addr + STEER_OFFSET, game_steer + steer)
+            else:
+                write_float(handle, z_addr + STEER_OFFSET, steer)
 
             if mode == "drift":
                 status = run_drift(handle, z_addr, steer)
