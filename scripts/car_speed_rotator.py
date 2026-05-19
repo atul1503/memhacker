@@ -41,7 +41,7 @@ STEER_OFFSET   = 12    # steer is 3 floats after Z
 # --- ROTATE mode ---
 # Forza tuning: negative (inverted convention) and CE default divided by 1.1
 STEER_SENSITIVITY = -0.03173  # radians per steer unit per tick (= -0.0349 / 1.1, Forza)
-DEAD_ZONE         = 0.01
+DEAD_ZONE         = 0.0
 
 # --- DRIFT mode ---
 DRIFT_LATERAL_STRENGTH = 5.0
@@ -49,9 +49,9 @@ DRIFT_ROTATE_MIX       = 0.03
 DRIFT_SPEED_MIN        = 2.0
 
 # --- Keyboard steering ---
-STEER_KEY_STEP    = 0.1    # steer changes per tick while key held (CE-style)
-STEER_DAMP        = 1.1    # exponential decay divisor when no key pressed (Forza tuned)
-STEER_MAX         = 1.0    # max steer magnitude — prevents wind-up
+STEER_KEY_STEP    = 0.1    # steer changes per tick while key held
+STEER_DAMP        = 1.1    # exponential decay divisor when no key pressed
+STEER_MAX         = 2.0    # max steer magnitude — prevents wind-up
 
 # --- Speed boost/brake (per tick at 20Hz) ---
 SPEED_BOOST_MULT  = 1.01   # UP arrow: 1.01 per tick = +22% per second
