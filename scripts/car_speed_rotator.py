@@ -63,53 +63,124 @@ Z_SPEED_CHAIN = ("forzahorizon6.exe", 0xA945820, [
     0x28
 ])
 
-# Byte offsets of the X / Y / Z / steer floats relative to the resolved Z addr.
-# Velocity is almost always a float[3], so X = Z-8 and Y = Z-4. STEER varies.
+# -----------------------------------------------------------------------------
+# X / Y / Z / STEER offsets — bytes relative to the resolved Z address.
+# Velocity is almost always a float[3] {X, Y, Z}, so X is 8 bytes before Z and
+# Y is 4 bytes before Z. STEER lives near the velocity but the exact offset
+# varies per game — scan a float that changes when you turn the wheel and
+# compute (steer_addr - z_addr).
+# -----------------------------------------------------------------------------
 X_SPEED_OFFSET = -8
 Y_SPEED_OFFSET = -4
 Z_SPEED_OFFSET =  0
 STEER_OFFSET   = 12
 
+# =============================================================================
 # ROTATE mode
-# Radians to rotate the velocity vector per (steer unit × tick). Negative if
-# the game's steer convention is inverted. Raise |value| to turn faster.
+# =============================================================================
+
+# STEER_SENSITIVITY
+#   Radians the velocity vector is rotated per (steer × tick). At 20Hz a value
+#   of 0.03 means: with steer=1.0, the car rotates 0.03 rad/tick × 20 ticks/s
+#   = 0.6 rad/s ≈ 34°/s. Larger magnitude = faster turn.
+#   Sign flips direction — make it negative if LEFT turns the car right.
 STEER_SENSITIVITY = -0.03173
-# Ignore steer values below this magnitude. 0.0 = always rotate if any steer.
+
+# DEAD_ZONE
+#   Ignore steer values with |steer| below this. Useful if you have a controller
+#   or analog input adding tiny noise. With keyboard input, 0.0 is fine.
 DEAD_ZONE         = 0.0
 
+# =============================================================================
 # DRIFT mode
-# How much sideways velocity is added per steer unit.
+# =============================================================================
+
+# DRIFT_LATERAL_STRENGTH
+#   How much sideways velocity to add per (steer unit × tick). Bigger = more
+#   pronounced sideways slide. 5.0 is a moderate drift; try 2.0 for subtle.
 DRIFT_LATERAL_STRENGTH = 5.0
-# How much the velocity vector is also rotated (mixes drift + turn). 0 = pure slide.
+
+# DRIFT_ROTATE_MIX
+#   How much the velocity vector is *also* rotated during a drift (radians per
+#   steer unit). 0 = pure sideways slide, no turning. Small values like 0.03
+#   let the car gradually rotate into the slide so it doesn't feel sticky.
 DRIFT_ROTATE_MIX       = 0.03
-# Don't drift below this speed (avoids weird behavior when stopped).
+
+# DRIFT_SPEED_MIN
+#   Don't drift below this speed (units = game units/s, same as raw velocity).
+#   Drift physics misbehave at very low speed; this skips the effect when
+#   nearly stopped.
 DRIFT_SPEED_MIN        = 2.0
 
+# =============================================================================
 # Keyboard steering
-# Steer value change per tick while LEFT/RIGHT is held.
+# =============================================================================
+
+# STEER_KEY_STEP
+#   How much `steer` changes per tick while LEFT/RIGHT is held — a constant
+#   linear step. Bigger = faster wheel-turn input. 0.1 means 10 ticks (0.5s
+#   at 20Hz) to go from steer=0 to steer=1.
 STEER_KEY_STEP    = 0.1
-# Auto-center divisor per tick when no key is held (exponential decay).
-# Larger = faster centering. 1.0 = no decay.
+
+# STEER_DAMP
+#   Auto-center exponential divisor — applied every tick when NO arrow is held.
+#   `steer = steer / STEER_DAMP` each tick, so 1.1 means steer shrinks 9%/tick
+#   (decays curvy: fast at first, slow near 0). 1.0 = disabled, no centering.
+#   Bigger = snaps back to 0 faster.
 STEER_DAMP        = 1.1
-# Cap on |steer|. Prevents holding a key from winding up to absurd values.
+
+# STEER_MAX
+#   Hard cap on |steer|. Without this, holding LEFT for 10 seconds would push
+#   steer to a huge number, and on release it would take forever to decay back.
+#   2.0 means the car can over-saturate beyond the natural [-1,1] range but
+#   not by much.
 STEER_MAX         = 2.0
 
-# Steer reversal — when you press LEFT while steering right (or vice versa),
-# crush the existing steer back toward 0 using exponential decay first, then
-# switch to linear stepping once we're near 0. Reversal feels much snappier.
-# Set False to use plain linear step the whole way (old behavior).
+# -----------------------------------------------------------------------------
+# Steer reversal (hybrid exponential → linear when changing direction)
+# -----------------------------------------------------------------------------
+# When you press LEFT while currently steering right (steer > 0), or RIGHT
+# while currently steering left (steer < 0), we apply exponential decay first
+# (fast at high |steer|) and only switch to linear stepping once |steer| drops
+# below the threshold. Result: direction changes feel much snappier than the
+# plain linear step alone.
+
+# STEER_REVERSAL_ENABLED
+#   Master switch. False = always use the linear step (old behavior, sluggish
+#   reversal). True = use the hybrid scheme described above.
 STEER_REVERSAL_ENABLED   = True
-# Divisor used during reversal. Bigger = faster snap to 0 on direction change.
-# Independent from STEER_DAMP so you can tune reversal harder than auto-center.
+
+# STEER_REVERSAL_DAMP
+#   Divisor used during the exponential phase of a reversal. Bigger value =
+#   faster snap toward 0 when you change direction. Kept separate from
+#   STEER_DAMP (auto-center) so you can tune reversal more aggressively
+#   without making the no-key auto-center feel jumpy.
 STEER_REVERSAL_DAMP      = 1.1
-# Below this |steer| during reversal, switch from divide to linear step.
-# Math crossover for default settings is 1.1 (= STEER_KEY_STEP / (1 - 1/STEER_REVERSAL_DAMP)).
-# Past that point linear is actually faster than exponential, so we switch.
+
+# STEER_REVERSAL_THRESHOLD
+#   |steer| at which we switch from exponential divide to linear step during
+#   reversal. Below this, exponential drops would be smaller than a linear
+#   step, so linear is faster.
+#   Math: per-tick exp drop = steer × (1 - 1/STEER_REVERSAL_DAMP). That equals
+#   STEER_KEY_STEP when steer = STEER_KEY_STEP / (1 - 1/STEER_REVERSAL_DAMP).
+#   With defaults (step=0.1, damp=1.1) that's 1.1 — the math crossover.
+#   Lower threshold = transition into linear earlier (smoother, less abrupt).
+#   Higher threshold = stay in exponential longer (snappier, more sudden).
 STEER_REVERSAL_THRESHOLD = 1.1
 
-# Speed keys (multiplicative per tick)
-SPEED_BOOST_MULT  = 1.01   # UP arrow
-SPEED_BRAKE_MULT  = 0.97   # DOWN arrow
+# =============================================================================
+# Speed keys
+# =============================================================================
+
+# SPEED_BOOST_MULT
+#   UP arrow: multiplies velocity magnitude by this per tick. 1.01 at 20Hz is
+#   ~+22% per second. Bigger = more aggressive boost.
+SPEED_BOOST_MULT  = 1.01
+
+# SPEED_BRAKE_MULT
+#   DOWN arrow: same idea but <1.0 to shrink velocity. 0.97 at 20Hz is ~−46%
+#   per second. Smaller = harder brake.
+SPEED_BRAKE_MULT  = 0.97
 
 # Tick rate. 20Hz = 50ms per tick.
 UPDATE_HZ = 20
