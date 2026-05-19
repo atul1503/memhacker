@@ -1,4 +1,4 @@
-# MemHacker v2.4.0-alpha
+# MemHacker v2.4.1-alpha
 
 A Cheat Engine alternative written in Go — memory scanner, CE-style multi-session pointer scan, value freeze.
 
@@ -146,7 +146,7 @@ CE-style multi-session pointer scan. Find stable pointer chains that survive gam
 #### Running pscan
 
 ```
-pscan [depth] [offset] [max] [filter] [maxOffsets] [neg]
+pscan [depth] [offset] [max] [filter] [maxOffsets] [noneg]
 ```
 
 | Arg | Default | Description |
@@ -156,13 +156,13 @@ pscan [depth] [offset] [max] [filter] [maxOffsets] [neg]
 | `max` | `100` | Max chains to return |
 | `filter` | `exe` | `exe` = main exe only, `game` = all game DLLs, `all` = everything |
 | `maxOffsets` | `5` | Max offset groups per node (CE default) |
-| `neg` | off | Enable negative offsets (CE's NegativeOffsets). Try when normal scans return zero chains even with high offset. Slower. |
+| `noneg` | off | **Disable** negative offsets. By default both positive and negative offsets are scanned (CE's NegativeOffsets, ON). Pass `noneg` to skip the negative pass for ~2× speed. |
 
 **Multiple sessions run in parallel** — total time = slowest session, not sum.
 
 After pscan, results are **automatically saved** to `pscan_last_N.json` (never overwrites). Only chains that currently resolve in the live process are shown.
 
-**`neg` keyword:** by default pointer scans only consider pointers whose value lands at or before the target (positive offsets). Some game builds need pointers whose value lands *past* the target (negative offsets). Append `neg` anywhere in args to enable both directions, e.g. `pscan 5 8192 100 exe 5 neg`.
+**Negative offsets** (default ON since v2.4.1-alpha): pointer scans consider pointers whose value lands either at/before *or* past the target — required for game layouts where struct fields sit before the parent pointer. The `neg` keyword (still accepted as a no-op) is now the default. Use `noneg` to opt out for speed.
 
 ---
 

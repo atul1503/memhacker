@@ -265,8 +265,9 @@ Uses **semver** (MAJOR.MINOR.PATCH). AppVersion is in `logger.go`.
 
 | v2.3.0 | pmexport CE-compatible .scandata format, prmerge offline cross-session intersection, parallel pscan session fix (skip 0-chain sessions), game scripts folder (car speed rotator + drift), iread command, prlist shows live values, disk-backed scan results improvements |
 | v2.4.0-alpha | pscan `neg` keyword — CE's NegativeOffsets flag (also scans pointers whose value lands past the target). Use when normal scans return zero chains even with high offset. QuickEdit auto-toggle: disabled during long ops (scan/next/pmap/pscan), restored after — copy/paste still works at the prompt. pmload now loads ALL files passed (was only loading first arg). Car rotator script tuned for Forza H6 (20Hz, exponential decay, anti-windup clamp). |
+| v2.4.1-alpha | Negative offsets now default ON (was opt-in via `neg`). Use `noneg` to disable for ~2× speed. Real-world testing showed neg consistently finds chains that survive game updates — making it default avoids the "forgot the flag, got 0 chains" footgun. `neg` keyword still accepted as no-op for backward compat. |
 
-Current: **v2.4.0-alpha** (AppVersion in `logger.go`)
+Current: **v2.4.1-alpha** (AppVersion in `logger.go`)
 
 ---
 

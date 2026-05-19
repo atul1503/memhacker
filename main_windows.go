@@ -277,12 +277,12 @@ POINTER SCANNING
   pmsessions                    - list sessions
   pmclear                       - clear all sessions
 
-  pscan [depth] [offset] [max] [filter] [maxOffsets] [neg]
+  pscan [depth] [offset] [max] [filter] [maxOffsets] [noneg]
                                 - scan across all sessions (sessions run in parallel)
                                   filter: exe (default), game, all
-                                  defaults: depth=5 offset=8192 max=100
-                                  neg: enable negative offsets (CE NegativeOffsets) — try when 0 chains
-                                  e.g: pscan 5 4000 100   pscan 6 8192 100 game   pscan 5 8192 100 exe 5 neg
+                                  defaults: depth=5 offset=8192 max=100, negative offsets ON
+                                  noneg: disable negative offsets (~2x faster, fewer chains)
+                                  e.g: pscan 5 4000 100   pscan 6 8192 100 game   pscan 5 8192 100 exe 5 noneg
   (results auto-saved to pscan_last_N.json, only verified chains shown)
 
 POINTER RESULTS
@@ -1323,13 +1323,17 @@ func cmdPointerScan(args []string, reader *bufio.Reader) {
 		return
 	}
 
-	// Strip optional "neg" keyword (enables negative offsets, CE's NegativeOffsets flag)
-	negativeOffsets := false
+	// Negative offsets default ON (CE's NegativeOffsets flag). `noneg` disables for speed.
+	// `neg` kept as a no-op for backward compat.
+	negativeOffsets := true
 	filtered := args[:0:len(args)]
 	for _, a := range args {
-		if strings.ToLower(a) == "neg" {
+		switch strings.ToLower(a) {
+		case "neg":
 			negativeOffsets = true
-		} else {
+		case "noneg":
+			negativeOffsets = false
+		default:
 			filtered = append(filtered, a)
 		}
 	}
@@ -1358,8 +1362,8 @@ func cmdPointerScan(args []string, reader *bufio.Reader) {
 		maxOffsetsPerNode, _ = strconv.Atoi(args[4])
 	}
 
-	negLabel := ""
-	if negativeOffsets { negLabel = " neg" }
+	negLabel := " neg"
+	if !negativeOffsets { negLabel = " noneg" }
 	fmt.Printf("Running pointer scan across %d session(s): depth=%d maxOffset=0x%X maxResults=%d%s\n",
 		len(pscanSessions), depth, maxOffset, maxResults, negLabel)
 	for i, s := range pscanSessions {
