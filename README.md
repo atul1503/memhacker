@@ -1,4 +1,4 @@
-# MemHacker v2.6.0-alpha
+# MemHacker v2.7.0-alpha
 
 A Cheat Engine alternative written in Go — memory scanner, CE-style multi-session pointer scan, value freeze.
 
@@ -99,8 +99,13 @@ scan exact 0 cap 500000                  <- stop after 500K results
 | `write <addr> <val>` | Write value to address |
 | `iread <addr> <index>` | Read at `addr + index × sizeof(type)`. e.g. `iread 0x1A2B3C 4` reads 4th element of array |
 | `iwrite <idx> <val>` | Write to scan result by index. Supports range/list: `iwrite 5 100` `iwrite 5-7 100` `iwrite 1,3,5 100` |
-| `add <addr> [label]` | Add address to address list |
-| `addrlist` | Show address list with live values |
+| `add <addr> [label]` | Add address to address list (captures the current data type) |
+| `addrlist` (alias `al`) | Show address list with live values (1-based indices) |
+| `aread <idx\|range\|list>` (alias `ar`) | Read entries from the address list, using each entry's stored type. e.g. `aread 1`, `aread 1-3`, `aread 1,3,5` |
+| `awrite <idx\|range\|list> <val>` (alias `aw`) | Write a value to address list entries. e.g. `awrite 1 999`, `awrite 1-3 100` |
+| `afreeze <idx\|range\|list> <val>` (alias `af`) | Freeze address list entries at a value. Uses each entry's stored type. |
+| `aremove <idx\|range\|list>` (alias `arm`) | Remove entries from the list. Removes from highest to lowest so earlier indices don't shift. |
+| `aclear` | Empty the address list. |
 
 ---
 

@@ -275,8 +275,9 @@ Uses **semver** (MAJOR.MINOR.PATCH). AppVersion is in `logger.go`.
 | v2.5.2-alpha | `look` short keywords: `b` = before, `a` = after. e.g. `look hp b 4 a 16`. |
 | v2.5.3-alpha | `look` drops the raw-bytes column. The decoded value column was carrying the info; the hex bytes were noise next to it. |
 | v2.6.0-alpha | `look` adds Guess + Confidence columns. Per-row heuristic that picks the most likely type: f32 / f64 / i32 / i64 / i8 / ptr / zero. Pointer detection uses the live process (ReadMemory at the candidate addr) so it's reliable for real pointers. Reads 8 extra bytes past the end so small-type rows (f32, i32) can still sniff for f64/i64/ptr in the overlapping window. |
+| v2.7.0-alpha | Address list gets index ops: `aread` / `awrite` / `afreeze` / `aremove` / `aclear` (aliases `ar` / `aw` / `af` / `arm`). Each entry retains its captured data type. `addrlist` now displays 1-based indices to match the rest of the tool. |
 
-Current: **v2.6.0-alpha** (AppVersion in `logger.go`)
+Current: **v2.7.0-alpha** (AppVersion in `logger.go`)
 
 ---
 

@@ -122,6 +122,21 @@ func main() {
 			cmdAddToList(args)
 		case "addrlist", "al":
 			cmdShowAddressList()
+		case "aread", "ar":
+			Log.Info("CMD: aread %v", args)
+			cmdAddrListRead(args)
+		case "awrite", "aw":
+			Log.Info("CMD: awrite %v", args)
+			cmdAddrListWrite(args)
+		case "afreeze", "af":
+			Log.Info("CMD: afreeze %v", args)
+			cmdAddrListFreeze(args)
+		case "aremove", "arm":
+			Log.Info("CMD: aremove %v", args)
+			cmdAddrListRemove(args)
+		case "aclear":
+			Log.Info("CMD: aclear")
+			cmdAddrListClear()
 		case "freeze", "f":
 			Log.Info("CMD: freeze %v", args)
 			cmdFreeze(args)
@@ -266,8 +281,15 @@ VALUE OPS
                                   e.g: iread 0x1A2B3C 4  reads 4th element of f32 array
   iwrite <idx> <value>          - write to scan result by index
                                   e.g: iwrite 5 100   iwrite 5-7 100   iwrite 1,3,5 100
-  add <addr> [label]            - add to address list
-  addrlist                      - show address list with live values
+  add <addr> [label]            - add to address list (uses current data type)
+  addrlist                      - show address list with live values (1-based #)
+  aread <idx|range|list>        - read entries from address list (entry's own type)
+                                  e.g: aread 1   aread 1-3   aread 1,3,5
+  awrite <idx|range|list> <val> - write value to address list entries
+                                  e.g: awrite 1 999   awrite 1-3 100
+  afreeze <idx|range|list> <val>- freeze address list entries at value
+  aremove <idx|range|list>      - drop entries from the list (1-based, highest first)
+  aclear                        - remove all entries from the list
 
 FREEZING
   freeze <addr> <value> [label] - freeze address at value (50ms write loop)
@@ -975,10 +997,10 @@ func cmdAddToList(args []string) {
 
 func cmdShowAddressList() {
 	if len(addressList) == 0 {
-		fmt.Println("Address list is empty")
+		fmt.Println("Address list is empty. Use 'add <addr> [label]' to populate.")
 		return
 	}
-	fmt.Printf("%-5s  %-20s  %-8s  %-20s  %s\n", "ID", "Address", "Type", "Value", "Label")
+	fmt.Printf("%-5s  %-20s  %-8s  %-20s  %s\n", "#", "Address", "Type", "Value", "Label")
 	fmt.Println(strings.Repeat("-", 70))
 	for i, e := range addressList {
 		val := "?"
@@ -988,8 +1010,164 @@ func cmdShowAddressList() {
 				val = v
 			}
 		}
-		fmt.Printf("%-5d  0x%-18X  %-8s  %-20s  %s\n", i, e.Addr, dataTypeName(e.DT), val, e.Label)
+		fmt.Printf("%-5d  0x%-18X  %-8s  %-20s  %s\n", i+1, e.Addr, dataTypeName(e.DT), val, e.Label)
 	}
+	fmt.Printf("\n%d entries. Use aread / awrite / afreeze / aremove with the # column.\n", len(addressList))
+}
+
+// cmdAddrListRead — read addressList[idx] using each entry's stored data type.
+func cmdAddrListRead(args []string) {
+	if currentHandle == 0 {
+		fmt.Println("Not attached")
+		return
+	}
+	if len(args) == 0 {
+		fmt.Println("Usage: aread <idx|range|list>")
+		fmt.Println("  e.g: aread 1        <- read entry #1")
+		fmt.Println("       aread 1-3      <- read entries #1, #2, #3")
+		fmt.Println("       aread 1,3,5    <- read entries #1, #3, #5")
+		return
+	}
+	if len(addressList) == 0 {
+		fmt.Println("Address list is empty. Use 'add <addr> [label]' first.")
+		return
+	}
+	indices := parseIndexSpec(args[0])
+	for _, idx := range indices {
+		if idx < 1 || idx > len(addressList) {
+			fmt.Printf("  [%d] out of range (total %d)\n", idx, len(addressList))
+			continue
+		}
+		e := addressList[idx-1]
+		val, err := scanner.ReadCurrentValue(e.Addr, e.DT)
+		if err != nil {
+			fmt.Printf("  [%d] 0x%X read failed: %v\n", idx, e.Addr, err)
+			continue
+		}
+		fmt.Printf("  [%d] 0x%X (%s) = %s  %s\n", idx, e.Addr, dataTypeName(e.DT), val, e.Label)
+	}
+}
+
+// cmdAddrListWrite — write a value to addressList[idx] using each entry's data type.
+func cmdAddrListWrite(args []string) {
+	if currentHandle == 0 {
+		fmt.Println("Not attached")
+		return
+	}
+	if len(args) < 2 {
+		fmt.Println("Usage: awrite <idx|range|list> <value>")
+		fmt.Println("  e.g: awrite 1 999       <- write 999 to entry #1")
+		fmt.Println("       awrite 1-3 100     <- write 100 to entries #1, #2, #3")
+		fmt.Println("       awrite 1,3,5 100   <- write 100 to entries #1, #3, #5")
+		return
+	}
+	if len(addressList) == 0 {
+		fmt.Println("Address list is empty.")
+		return
+	}
+	indices := parseIndexSpec(args[0])
+	ok, failed := 0, 0
+	for _, idx := range indices {
+		if idx < 1 || idx > len(addressList) {
+			fmt.Printf("  [%d] out of range (total %d)\n", idx, len(addressList))
+			failed++
+			continue
+		}
+		e := addressList[idx-1]
+		val, err := encodeValue(e.DT, args[1])
+		if err != nil {
+			fmt.Printf("  [%d] invalid value for %s: %v\n", idx, dataTypeName(e.DT), err)
+			failed++
+			continue
+		}
+		if err := WriteMemory(currentHandle, e.Addr, val); err != nil {
+			fmt.Printf("  [%d] 0x%X write failed: %v\n", idx, e.Addr, err)
+			failed++
+			continue
+		}
+		fmt.Printf("  [%d] 0x%X (%s) = %s\n", idx, e.Addr, dataTypeName(e.DT), args[1])
+		ok++
+	}
+	fmt.Printf("Written to %d/%d entries\n", ok, ok+failed)
+}
+
+// cmdAddrListFreeze — freeze addressList[idx] at a value.
+func cmdAddrListFreeze(args []string) {
+	if currentHandle == 0 {
+		fmt.Println("Not attached")
+		return
+	}
+	if len(args) < 2 {
+		fmt.Println("Usage: afreeze <idx|range|list> <value>")
+		fmt.Println("  e.g: afreeze 1 999       <- freeze entry #1 at 999")
+		fmt.Println("       afreeze 1-3 100     <- freeze entries #1, #2, #3 at 100")
+		return
+	}
+	if len(addressList) == 0 {
+		fmt.Println("Address list is empty.")
+		return
+	}
+	indices := parseIndexSpec(args[0])
+	ok, failed := 0, 0
+	for _, idx := range indices {
+		if idx < 1 || idx > len(addressList) {
+			fmt.Printf("  [%d] out of range (total %d)\n", idx, len(addressList))
+			failed++
+			continue
+		}
+		e := addressList[idx-1]
+		val, err := encodeValue(e.DT, args[1])
+		if err != nil {
+			fmt.Printf("  [%d] invalid value for %s: %v\n", idx, dataTypeName(e.DT), err)
+			failed++
+			continue
+		}
+		label := e.Label
+		if label == "" {
+			label = fmt.Sprintf("addrlist[%d]", idx)
+		}
+		id := freezer.Add(e.Addr, val, label)
+		fmt.Printf("  [%d] 0x%X (%s) = %s (freeze #%d)\n", idx, e.Addr, dataTypeName(e.DT), args[1], id)
+		ok++
+	}
+	fmt.Printf("Frozen %d/%d entries\n", ok, ok+failed)
+}
+
+// cmdAddrListRemove — remove entries by index. Removes from highest to lowest
+// so earlier indices don't shift mid-operation.
+func cmdAddrListRemove(args []string) {
+	if len(args) == 0 {
+		fmt.Println("Usage: aremove <idx|range|list>")
+		fmt.Println("  e.g: aremove 1        <- remove entry #1")
+		fmt.Println("       aremove 1-3      <- remove entries #1, #2, #3")
+		fmt.Println("       aremove 1,3,5    <- remove entries #1, #3, #5")
+		return
+	}
+	if len(addressList) == 0 {
+		fmt.Println("Address list is empty.")
+		return
+	}
+	indices := parseIndexSpec(args[0])
+	sort.Sort(sort.Reverse(sort.IntSlice(indices)))
+	removed := 0
+	for _, idx := range indices {
+		if idx < 1 || idx > len(addressList) {
+			fmt.Printf("  [%d] out of range\n", idx)
+			continue
+		}
+		e := addressList[idx-1]
+		addressList = append(addressList[:idx-1], addressList[idx:]...)
+		fmt.Printf("  removed [%d] 0x%X %s\n", idx, e.Addr, e.Label)
+		removed++
+	}
+	fmt.Printf("Removed %d entries. %d remaining.\n", removed, len(addressList))
+}
+
+// cmdAddrListClear — drop everything.
+func cmdAddrListClear() {
+	n := len(addressList)
+	addressList = nil
+	fmt.Printf("Cleared %d entries from address list.\n", n)
 }
 
 func cmdRead(args []string) {
