@@ -251,8 +251,11 @@ SCANNING                        (default type: f32, default scope: writable priv
 VALUE OPS
   read <addr> [dt]              - read value at address
   look <addr> [count]           - dump neighbors around addr as the current data type
-                                  (count = entries each side, default 8 → 17 rows)
+                                  count = entries each side, default 8 (17 rows)
+                                  asymmetric: look <addr> before <n> | after <n>
                                   e.g: look 0x614DD58       look hp 16
+                                       look hp before 4 after 16
+                                       look hp after 32     <- only forward
   write <addr> <value>          - write value at address
   iread <addr> <index>          - read at addr + index * sizeof(type)
                                   e.g: iread 0x1A2B3C 4  reads 4th element of f32 array
@@ -1014,14 +1017,23 @@ func cmdRead(args []string) {
 }
 
 // cmdLook — dump memory around an address as a grid of the current data type.
-// Usage: look <addr> [count]   count = entries on each side (default 8).
+// Usage:
+//   look <addr>                       → 8 before + addr + 8 after
+//   look <addr> <n>                   → n before + addr + n after (symmetric)
+//   look <addr> before <n>            → n before + addr only (no after)
+//   look <addr> after <n>             → addr + n after only (no before)
+//   look <addr> before <a> after <b>  → a before + addr + b after
 func cmdLook(args []string) {
 	if currentHandle == 0 {
 		fmt.Println("Not attached")
 		return
 	}
 	if len(args) == 0 {
-		fmt.Println("Usage: look <addr> [count]   (count = entries each side; default 8)")
+		fmt.Println("Usage: look <addr> [count]")
+		fmt.Println("       look <addr> before <n>")
+		fmt.Println("       look <addr> after <n>")
+		fmt.Println("       look <addr> before <a> after <b>")
+		fmt.Println("Default: 8 entries on each side.")
 		return
 	}
 	addr, err := resolveAddr(args[0])
@@ -1029,21 +1041,66 @@ func cmdLook(args []string) {
 		fmt.Println("Invalid address:", err)
 		return
 	}
-	count := 8
-	if len(args) > 1 {
-		if c, e := strconv.Atoi(args[1]); e == nil && c > 0 {
-			count = c
-		}
-	}
 	dt := currentDT
 	if dt == TypeBytes || dt == TypeString {
 		fmt.Println("look: bytes/string not supported here — set a fixed-size type (i8/u8/i16/u16/i32/u32/i64/u64/f32/f64) and retry.")
 		return
 	}
+
+	beforeCount := -1
+	afterCount := -1
+	symmetric := -1
+
+	i := 1
+	for i < len(args) {
+		a := strings.ToLower(args[i])
+		if (a == "before" || a == "after") && i+1 < len(args) {
+			if n, e := strconv.Atoi(args[i+1]); e == nil && n >= 0 {
+				if a == "before" {
+					beforeCount = n
+				} else {
+					afterCount = n
+				}
+			} else {
+				fmt.Printf("look: invalid count after '%s': %s\n", a, args[i+1])
+				return
+			}
+			i += 2
+			continue
+		}
+		if n, e := strconv.Atoi(a); e == nil && n >= 0 {
+			symmetric = n
+			i++
+			continue
+		}
+		fmt.Printf("look: unrecognized arg '%s'\n", args[i])
+		return
+	}
+
+	switch {
+	case symmetric >= 0:
+		if beforeCount < 0 {
+			beforeCount = symmetric
+		}
+		if afterCount < 0 {
+			afterCount = symmetric
+		}
+	case beforeCount >= 0 || afterCount >= 0:
+		if beforeCount < 0 {
+			beforeCount = 0
+		}
+		if afterCount < 0 {
+			afterCount = 0
+		}
+	default:
+		beforeCount = 8
+		afterCount = 8
+	}
+
 	sz := dataTypeSize(dt)
-	totalEntries := 2*count + 1
+	totalEntries := beforeCount + 1 + afterCount
 	totalBytes := totalEntries * sz
-	start := addr - uintptr(count*sz)
+	start := addr - uintptr(beforeCount*sz)
 
 	buf, err := ReadMemory(currentHandle, start, totalBytes)
 	if err != nil || len(buf) < totalBytes {
@@ -1051,13 +1108,13 @@ func cmdLook(args []string) {
 		return
 	}
 
-	fmt.Printf("Looking around 0x%X as %s (size=%d), ±%d entries:\n",
-		addr, dataTypeName(dt), sz, count)
+	fmt.Printf("Looking around 0x%X as %s (size=%d) — %d before, %d after:\n",
+		addr, dataTypeName(dt), sz, beforeCount, afterCount)
 	fmt.Printf("%-8s  %-20s  %-20s  %s\n", "Offset", "Address", "Value", "Bytes")
 	fmt.Println(strings.Repeat("-", 70))
 
 	for i := 0; i < totalEntries; i++ {
-		off := (i - count) * sz
+		off := (i - beforeCount) * sz
 		entryAddr := start + uintptr(i*sz)
 		chunk := buf[i*sz : (i+1)*sz]
 		val := decodeValue(dt, chunk)

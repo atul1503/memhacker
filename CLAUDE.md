@@ -271,8 +271,9 @@ Uses **semver** (MAJOR.MINOR.PATCH). AppVersion is in `logger.go`.
 | v2.4.4-alpha | Car rotator: additive steer mode (default). New STEER_WRITE_MODE="add" reads game's current steer and writes (game+script), so your wheel/controller still works — script just nudges on top. When script is idle (|steer|<0.001) it doesn't write at all. Set to "set" for old override behavior. Velocity rotation always uses script-only steer regardless of mode. |
 | v2.4.5-alpha | Car rotator: clamp the combined (game_steer + script_steer) value to ±STEER_MAX before writing in "add" mode, so saturated controller input + script keys can't push the written value past the cap. |
 | v2.5.0-alpha | New `look <addr> [count]` command — dumps `count` entries on each side of an address as the current data type, with offset, address, decoded value, and raw bytes. Default count=8 (17 rows). Bytes/string types are rejected (no fixed size). Alias `l`. |
+| v2.5.1-alpha | `look` gains asymmetric arg parsing: `look <addr> before <n>`, `look <addr> after <n>`, or both. Plain `look <addr> <n>` still means symmetric. Default unchanged (8 each side). |
 
-Current: **v2.5.0-alpha** (AppVersion in `logger.go`)
+Current: **v2.5.1-alpha** (AppVersion in `logger.go`)
 
 ---
 
