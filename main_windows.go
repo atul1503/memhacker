@@ -1113,26 +1113,19 @@ func cmdLook(args []string) {
 
 	fmt.Printf("Looking around 0x%X as %s (size=%d) — %d before, %d after:\n",
 		addr, dataTypeName(dt), sz, beforeCount, afterCount)
-	fmt.Printf("%-8s  %-20s  %-20s  %s\n", "Offset", "Address", "Value", "Bytes")
-	fmt.Println(strings.Repeat("-", 70))
+	fmt.Printf("%-8s  %-20s  %s\n", "Offset", "Address", "Value")
+	fmt.Println(strings.Repeat("-", 50))
 
 	for i := 0; i < totalEntries; i++ {
 		off := (i - beforeCount) * sz
 		entryAddr := start + uintptr(i*sz)
 		chunk := buf[i*sz : (i+1)*sz]
 		val := decodeValue(dt, chunk)
-		hex := ""
-		for j, b := range chunk {
-			if j > 0 {
-				hex += " "
-			}
-			hex += fmt.Sprintf("%02X", b)
-		}
 		marker := "  "
 		if off == 0 {
 			marker = "→ "
 		}
-		fmt.Printf("%s%+-7d 0x%-18X  %-20s  %s\n", marker, off, entryAddr, val, hex)
+		fmt.Printf("%s%+-7d 0x%-18X  %s\n", marker, off, entryAddr, val)
 	}
 }
 

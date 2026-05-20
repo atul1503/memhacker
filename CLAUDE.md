@@ -273,8 +273,9 @@ Uses **semver** (MAJOR.MINOR.PATCH). AppVersion is in `logger.go`.
 | v2.5.0-alpha | New `look <addr> [count]` command — dumps `count` entries on each side of an address as the current data type, with offset, address, decoded value, and raw bytes. Default count=8 (17 rows). Bytes/string types are rejected (no fixed size). Alias `l`. |
 | v2.5.1-alpha | `look` gains asymmetric arg parsing: `look <addr> before <n>`, `look <addr> after <n>`, or both. Plain `look <addr> <n>` still means symmetric. Default unchanged (8 each side). |
 | v2.5.2-alpha | `look` short keywords: `b` = before, `a` = after. e.g. `look hp b 4 a 16`. |
+| v2.5.3-alpha | `look` drops the raw-bytes column. The decoded value column was carrying the info; the hex bytes were noise next to it. |
 
-Current: **v2.5.2-alpha** (AppVersion in `logger.go`)
+Current: **v2.5.3-alpha** (AppVersion in `logger.go`)
 
 ---
 
