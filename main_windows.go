@@ -252,10 +252,11 @@ VALUE OPS
   read <addr> [dt]              - read value at address
   look <addr> [count]           - dump neighbors around addr as the current data type
                                   count = entries each side, default 8 (17 rows)
-                                  asymmetric: look <addr> before <n> | after <n>
+                                  asymmetric: before|b <n>, after|a <n> (or both)
                                   e.g: look 0x614DD58       look hp 16
                                        look hp before 4 after 16
-                                       look hp after 32     <- only forward
+                                       look hp b 4 a 16     <- same, short form
+                                       look hp a 32         <- only forward
   write <addr> <value>          - write value at address
   iread <addr> <index>          - read at addr + index * sizeof(type)
                                   e.g: iread 0x1A2B3C 4  reads 4th element of f32 array
@@ -1030,9 +1031,9 @@ func cmdLook(args []string) {
 	}
 	if len(args) == 0 {
 		fmt.Println("Usage: look <addr> [count]")
-		fmt.Println("       look <addr> before <n>")
-		fmt.Println("       look <addr> after <n>")
-		fmt.Println("       look <addr> before <a> after <b>")
+		fmt.Println("       look <addr> before|b <n>")
+		fmt.Println("       look <addr> after|a <n>")
+		fmt.Println("       look <addr> before|b <a> after|a <b>")
 		fmt.Println("Default: 8 entries on each side.")
 		return
 	}
@@ -1054,9 +1055,11 @@ func cmdLook(args []string) {
 	i := 1
 	for i < len(args) {
 		a := strings.ToLower(args[i])
-		if (a == "before" || a == "after") && i+1 < len(args) {
+		isBefore := a == "before" || a == "b"
+		isAfter := a == "after" || a == "a"
+		if (isBefore || isAfter) && i+1 < len(args) {
 			if n, e := strconv.Atoi(args[i+1]); e == nil && n >= 0 {
-				if a == "before" {
+				if isBefore {
 					beforeCount = n
 				} else {
 					afterCount = n

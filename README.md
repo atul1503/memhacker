@@ -1,4 +1,4 @@
-# MemHacker v2.5.1-alpha
+# MemHacker v2.5.2-alpha
 
 A Cheat Engine alternative written in Go — memory scanner, CE-style multi-session pointer scan, value freeze.
 
@@ -95,7 +95,7 @@ scan exact 0 cap 500000                  <- stop after 500K results
 | Command | Description |
 |---------|-------------|
 | `read <addr> [type]` | Read live value at address |
-| `look <addr> [count]` | Dump neighbors around an address as the current data type. `count` = entries on each side (default 8 → 17 rows). Asymmetric forms also work: `look <addr> before <n>`, `look <addr> after <n>`, or both together: `look <addr> before <a> after <b>`. Useful for figuring out what fields sit at `+4`, `+8` etc. relative to a found value. |
+| `look <addr> [count]` | Dump neighbors around an address as the current data type. `count` = entries on each side (default 8 → 17 rows). Asymmetric forms: `look <addr> before <n>` (or `b <n>`), `look <addr> after <n>` (or `a <n>`), or both: `look <addr> b 4 a 16`. Useful for figuring out what fields sit at `+4`, `+8` etc. relative to a found value. |
 | `write <addr> <val>` | Write value to address |
 | `iread <addr> <index>` | Read at `addr + index × sizeof(type)`. e.g. `iread 0x1A2B3C 4` reads 4th element of array |
 | `iwrite <idx> <val>` | Write to scan result by index. Supports range/list: `iwrite 5 100` `iwrite 5-7 100` `iwrite 1,3,5 100` |
