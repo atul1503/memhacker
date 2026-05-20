@@ -285,15 +285,23 @@ Current: **v2.8.0-alpha** (AppVersion in `logger.go`)
 
 ## Documentation Rules
 
-**Keep both `README.md` and the in-app `help` command (`printHelp()` in `main_windows.go`) in sync with the code.** Update both whenever:
-- A new command is added or an existing one changes behaviour or arguments
-- A command or feature is removed or renamed — remove from both README and help
+**User-facing documentation lives in exactly TWO places — keep them in sync, IN THE SAME COMMIT, every time:**
+
+1. **`README.md`** — the user-facing contract.
+2. **`printHelp()` in `main_windows.go`** — the in-tool reference (`help` command).
+
+**Do NOT document commands or features in this CLAUDE.md.** This file is context for the AI agent, not user docs. The only command-related thing that lives here is the Version History table, where each release gets a one-line summary.
+
+**Update README + help whenever any of these change** (and yes, this list includes aliases — if `ia` works, `ia` is documented in both):
+- A new command is added, or an existing one changes behaviour or arguments
+- A command or feature is removed or renamed — remove from both
+- A new alias is added to an existing command
 - Default values change (scan type, depth, offset, etc.)
 - A new temp file or folder is introduced
 - A workflow changes
 - New keywords/flags are added to existing commands (e.g. `range`, `cap`, `all` on scan)
 
-The README is the user-facing contract. The help command is the in-tool reference. If a feature is trashed or rolled back, remove it from both in the same commit.
+If you only touch one of README / help, you have an incomplete commit. Stop and update the other.
 
 ---
 
