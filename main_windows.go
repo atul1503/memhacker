@@ -30,6 +30,11 @@ var (
 	pointerMap     *PointerMap
 	addressList    []addressEntry
 
+	// last look context — lets `ladd <offset>` resolve to (lastLookAddr + offset)
+	lastLookAddr  uintptr
+	lastLookDT    DataType
+	lastLookValid bool
+
 	// pointer scan sessions: each is a saved (pmap_file, target_addr) pair
 	pscanSessions []PointerScanSession
 )
@@ -120,6 +125,12 @@ func main() {
 			cmdIndexRead(args)
 		case "add", "a":
 			cmdAddToList(args)
+		case "iadd", "ia":
+			Log.Info("CMD: iadd %v", args)
+			cmdIndexAdd(args)
+		case "ladd", "la":
+			Log.Info("CMD: ladd %v", args)
+			cmdLookAdd(args)
 		case "addrlist", "alist", "al":
 			cmdShowAddressList()
 		case "aread", "ar":
@@ -282,6 +293,10 @@ VALUE OPS
   iwrite <idx> <value>          - write to scan result by index
                                   e.g: iwrite 5 100   iwrite 5-7 100   iwrite 1,3,5 100
   add <addr> [label]            - add to address list (uses current data type)
+  iadd <idx|range|list> [label] - add scan result(s) to address list by index
+                                  e.g: iadd 1   iadd 1-3   iadd 1,3,5 hp
+  ladd <off> [<off2> ...]       - add offsets from last 'look' to address list
+                                  e.g: ladd +4   ladd -8 +4 +8   ladd +4 +8 -- stats
   addrlist | alist | al         - show address list with live values (1-based #)
   aread <idx|range|list>        - read entries from address list (entry's own type)
                                   e.g: aread 1   aread 1-3   aread 1,3,5
@@ -995,6 +1010,93 @@ func cmdAddToList(args []string) {
 	fmt.Printf("Added 0x%X to address list\n", addr)
 }
 
+// cmdIndexAdd — add scan results to the address list by 1-based index.
+// Each added entry captures the CURRENT data type.
+func cmdIndexAdd(args []string) {
+	if scanner == nil || scanner.totalResults() == 0 {
+		fmt.Println("No scan results. Run scan first.")
+		return
+	}
+	if len(args) == 0 {
+		fmt.Println("Usage: iadd <idx|range|list> [label]")
+		fmt.Println("  e.g: iadd 1                <- add scan result #1")
+		fmt.Println("       iadd 1-3              <- add results #1, #2, #3")
+		fmt.Println("       iadd 1,3,5 hp         <- add results #1, #3, #5 (all labeled 'hp')")
+		return
+	}
+	indices := parseIndexSpec(args[0])
+	label := ""
+	if len(args) > 1 {
+		label = strings.Join(args[1:], " ")
+	}
+	added := 0
+	for _, idx := range indices {
+		if idx < 1 || idx > scanner.totalResults() {
+			fmt.Printf("  [%d] out of range (total %d)\n", idx, scanner.totalResults())
+			continue
+		}
+		addr, _ := scanner.getResult(idx - 1)
+		thisLabel := label
+		if thisLabel == "" {
+			thisLabel = fmt.Sprintf("scan #%d", idx)
+		}
+		addressList = append(addressList, addressEntry{Addr: addr, Label: thisLabel, DT: currentDT})
+		fmt.Printf("  added [%d] 0x%X (%s)  label=%q\n", idx, addr, dataTypeName(currentDT), thisLabel)
+		added++
+	}
+	fmt.Printf("Added %d entries. Use 'alist' to see them.\n", added)
+}
+
+// cmdLookAdd — add offsets from the last `look` to the address list.
+// Offsets are byte offsets relative to the address you passed to look, and
+// accept both decimal (+4, -8) and hex (0x10, +0x20, -0x20) forms.
+func cmdLookAdd(args []string) {
+	if !lastLookValid {
+		fmt.Println("No recent look. Run 'look <addr>' first.")
+		return
+	}
+	if len(args) == 0 {
+		fmt.Println("Usage: ladd <offset> [<offset2> ...] [-- label]")
+		fmt.Println("  e.g: ladd +4               <- adds (look_addr + 4)")
+		fmt.Println("       ladd -8 +4 +8         <- adds three offsets")
+		fmt.Println("       ladd +4 +8 -- stats   <- multiple offsets, single shared label")
+		fmt.Println("       ladd 0x10             <- hex offsets also accepted")
+		return
+	}
+	sharedLabel := ""
+	offsets := args
+	for i, a := range args {
+		if a == "--" && i+1 < len(args) {
+			sharedLabel = strings.Join(args[i+1:], " ")
+			offsets = args[:i]
+			break
+		}
+	}
+	added := 0
+	for _, a := range offsets {
+		off, err := strconv.ParseInt(a, 0, 64)
+		if err != nil {
+			fmt.Printf("  invalid offset '%s': %v\n", a, err)
+			continue
+		}
+		var addr uintptr
+		if off >= 0 {
+			addr = lastLookAddr + uintptr(off)
+		} else {
+			addr = lastLookAddr - uintptr(-off)
+		}
+		label := sharedLabel
+		if label == "" {
+			label = fmt.Sprintf("look %+d", off)
+		}
+		addressList = append(addressList, addressEntry{Addr: addr, Label: label, DT: lastLookDT})
+		fmt.Printf("  added 0x%X (%s, offset %+d)  label=%q\n",
+			addr, dataTypeName(lastLookDT), off, label)
+		added++
+	}
+	fmt.Printf("Added %d entries. Use 'alist' to see them.\n", added)
+}
+
 func cmdShowAddressList() {
 	if len(addressList) == 0 {
 		fmt.Println("Address list is empty. Use 'add <addr> [label]' to populate.")
@@ -1428,6 +1530,11 @@ func cmdLook(args []string) {
 		fmt.Printf("Read failed at 0x%X (%d bytes): %v\n", start, totalBytes, err)
 		return
 	}
+
+	// Remember this look so `ladd <offset>` works
+	lastLookAddr = addr
+	lastLookDT = dt
+	lastLookValid = true
 
 	fmt.Printf("Looking around 0x%X as %s (size=%d) — %d before, %d after:\n",
 		addr, dataTypeName(dt), sz, beforeCount, afterCount)

@@ -1,4 +1,4 @@
-# MemHacker v2.7.1-alpha
+# MemHacker v2.8.0-alpha
 
 A Cheat Engine alternative written in Go — memory scanner, CE-style multi-session pointer scan, value freeze.
 
@@ -100,6 +100,8 @@ scan exact 0 cap 500000                  <- stop after 500K results
 | `iread <addr> <index>` | Read at `addr + index × sizeof(type)`. e.g. `iread 0x1A2B3C 4` reads 4th element of array |
 | `iwrite <idx> <val>` | Write to scan result by index. Supports range/list: `iwrite 5 100` `iwrite 5-7 100` `iwrite 1,3,5 100` |
 | `add <addr> [label]` | Add address to address list (captures the current data type) |
+| `iadd <idx\|range\|list> [label]` (alias `ia`) | Add **scan result(s)** to the address list by 1-based index. Each entry captures the current data type. `iadd 1`, `iadd 1-3`, `iadd 1,3,5 hp`. |
+| `ladd <off> [<off2> ...]` (alias `la`) | Add offsets from the **last `look`** to the address list. Offset is in bytes, signed. Accepts decimal (`+4`, `-8`) and hex (`0x10`, `+0x20`). Multiple offsets in one command. Optional shared label after `--`: `ladd +4 +8 -- stats`. |
 | `addrlist` (aliases `alist`, `al`) | Show address list with live values (1-based indices) |
 | `aread <idx\|range\|list>` (alias `ar`) | Read entries from the address list, using each entry's stored type. e.g. `aread 1`, `aread 1-3`, `aread 1,3,5` |
 | `awrite <idx\|range\|list> <val>` (alias `aw`) | Write a value to address list entries. e.g. `awrite 1 999`, `awrite 1-3 100` |

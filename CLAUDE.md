@@ -277,8 +277,9 @@ Uses **semver** (MAJOR.MINOR.PATCH). AppVersion is in `logger.go`.
 | v2.6.0-alpha | `look` adds Guess + Confidence columns. Per-row heuristic that picks the most likely type: f32 / f64 / i32 / i64 / i8 / ptr / zero. Pointer detection uses the live process (ReadMemory at the candidate addr) so it's reliable for real pointers. Reads 8 extra bytes past the end so small-type rows (f32, i32) can still sniff for f64/i64/ptr in the overlapping window. |
 | v2.7.0-alpha | Address list gets index ops: `aread` / `awrite` / `afreeze` / `aremove` / `aclear` (aliases `ar` / `aw` / `af` / `arm`). Each entry retains its captured data type. `addrlist` now displays 1-based indices to match the rest of the tool. |
 | v2.7.1-alpha | `alist` added as a third alias for `addrlist` — slots neatly with the rest of the `a*` family. |
+| v2.8.0-alpha | New ways to populate the address list: `iadd <idx>` adds scan results by index (alias `ia`); `ladd <offset>` adds offsets from the last `look` (alias `la`, accepts +/- decimal and hex, multiple in one go, optional `-- label` for a shared label). Removes the need to paste hex addresses by hand. |
 
-Current: **v2.7.1-alpha** (AppVersion in `logger.go`)
+Current: **v2.8.0-alpha** (AppVersion in `logger.go`)
 
 ---
 
