@@ -120,7 +120,7 @@ func main() {
 			cmdIndexRead(args)
 		case "add", "a":
 			cmdAddToList(args)
-		case "addrlist", "al":
+		case "addrlist", "alist", "al":
 			cmdShowAddressList()
 		case "aread", "ar":
 			Log.Info("CMD: aread %v", args)
@@ -282,7 +282,7 @@ VALUE OPS
   iwrite <idx> <value>          - write to scan result by index
                                   e.g: iwrite 5 100   iwrite 5-7 100   iwrite 1,3,5 100
   add <addr> [label]            - add to address list (uses current data type)
-  addrlist                      - show address list with live values (1-based #)
+  addrlist | alist | al         - show address list with live values (1-based #)
   aread <idx|range|list>        - read entries from address list (entry's own type)
                                   e.g: aread 1   aread 1-3   aread 1,3,5
   awrite <idx|range|list> <val> - write value to address list entries
