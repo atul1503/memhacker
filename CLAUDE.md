@@ -274,8 +274,9 @@ Uses **semver** (MAJOR.MINOR.PATCH). AppVersion is in `logger.go`.
 | v2.5.1-alpha | `look` gains asymmetric arg parsing: `look <addr> before <n>`, `look <addr> after <n>`, or both. Plain `look <addr> <n>` still means symmetric. Default unchanged (8 each side). |
 | v2.5.2-alpha | `look` short keywords: `b` = before, `a` = after. e.g. `look hp b 4 a 16`. |
 | v2.5.3-alpha | `look` drops the raw-bytes column. The decoded value column was carrying the info; the hex bytes were noise next to it. |
+| v2.6.0-alpha | `look` adds Guess + Confidence columns. Per-row heuristic that picks the most likely type: f32 / f64 / i32 / i64 / i8 / ptr / zero. Pointer detection uses the live process (ReadMemory at the candidate addr) so it's reliable for real pointers. Reads 8 extra bytes past the end so small-type rows (f32, i32) can still sniff for f64/i64/ptr in the overlapping window. |
 
-Current: **v2.5.3-alpha** (AppVersion in `logger.go`)
+Current: **v2.6.0-alpha** (AppVersion in `logger.go`)
 
 ---
 

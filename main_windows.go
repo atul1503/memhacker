@@ -4,7 +4,9 @@ package main
 
 import (
 	"bufio"
+	"encoding/binary"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -253,6 +255,8 @@ VALUE OPS
   look <addr> [count]           - dump neighbors around addr as the current data type
                                   count = entries each side, default 8 (17 rows)
                                   asymmetric: before|b <n>, after|a <n> (or both)
+                                  also shows a per-row Guess + Confidence
+                                  (heuristic: f32 / f64 / i32 / i64 / i8 / ptr / zero)
                                   e.g: look 0x614DD58       look hp 16
                                        look hp before 4 after 16
                                        look hp b 4 a 16     <- same, short form
@@ -1017,6 +1021,138 @@ func cmdRead(args []string) {
 	fmt.Printf("0x%X = %s (%s)\n", addr, val, dataTypeName(dt))
 }
 
+// guessResult — what guessType decided this slice of memory probably is.
+type guessResult struct {
+	name       string  // "f32", "i32", "ptr", "f64", "i64", "i8", "zero"
+	confidence float64 // 0..1
+	extra      string  // e.g. for ptr "→ 0x1234"
+}
+
+// guessType inspects up to 8 bytes at addr and returns the most likely data
+// type. Heuristics, not magic — small ints and zeros are inherently ambiguous.
+//
+// peekBytes may be longer than the entry size (caller is expected to pass a
+// window that overlaps neighboring entries) so we can sniff pointers even when
+// the current data type is < 8 bytes.
+func guessType(peekBytes []byte, handle windows.Handle, is32Bit bool) guessResult {
+	if len(peekBytes) == 0 {
+		return guessResult{"-", 0, ""}
+	}
+
+	allZero := true
+	for _, b := range peekBytes {
+		if b != 0 {
+			allZero = false
+			break
+		}
+	}
+	if allZero {
+		return guessResult{"zero", 1.0, ""}
+	}
+
+	best := guessResult{"?", 0, ""}
+	consider := func(g guessResult) {
+		if g.confidence > best.confidence {
+			best = g
+		}
+	}
+
+	// Pointer (needs 8 bytes on 64-bit, 4 on 32-bit). Strongest signal when
+	// the candidate value points to readable memory.
+	if !is32Bit && len(peekBytes) >= 8 {
+		v := binary.LittleEndian.Uint64(peekBytes[:8])
+		if v >= 0x10000 && v < 0x7FFFFFFFFFFF {
+			if _, err := ReadMemory(handle, uintptr(v), 8); err == nil {
+				consider(guessResult{"ptr", 0.92, fmt.Sprintf("→ 0x%X", v)})
+			}
+		}
+	} else if is32Bit && len(peekBytes) >= 4 {
+		v := binary.LittleEndian.Uint32(peekBytes[:4])
+		if v >= 0x10000 && v < 0x7FFFFFFF {
+			if _, err := ReadMemory(handle, uintptr(v), 4); err == nil {
+				consider(guessResult{"ptr", 0.90, fmt.Sprintf("→ 0x%X", v)})
+			}
+		}
+	}
+
+	// Float64
+	if len(peekBytes) >= 8 {
+		d := math.Float64frombits(binary.LittleEndian.Uint64(peekBytes[:8]))
+		if !math.IsNaN(d) && !math.IsInf(d, 0) {
+			abs := math.Abs(d)
+			if abs >= 1e-6 && abs <= 1e9 {
+				conf := 0.55
+				if abs >= 0.01 && abs <= 1e6 {
+					conf += 0.2
+				}
+				consider(guessResult{"f64", conf, ""})
+			}
+		}
+	}
+
+	// Float32
+	if len(peekBytes) >= 4 {
+		f := math.Float32frombits(binary.LittleEndian.Uint32(peekBytes[:4]))
+		fd := float64(f)
+		if !math.IsNaN(fd) && !math.IsInf(fd, 0) {
+			abs := math.Abs(fd)
+			if abs >= 1e-6 && abs <= 1e7 {
+				conf := 0.55
+				if abs >= 0.01 && abs <= 1e5 {
+					conf += 0.25
+				}
+				// "Clean" floats (whole / half / quarter) bump confidence
+				if f != 0 && math.Mod(fd, 0.25) == 0 {
+					conf += 0.08
+				}
+				consider(guessResult{"f32", conf, ""})
+			}
+		}
+	}
+
+	// Int64
+	if len(peekBytes) >= 8 {
+		v := int64(binary.LittleEndian.Uint64(peekBytes[:8]))
+		abs := v
+		if abs < 0 {
+			abs = -abs
+		}
+		// Reject huge values — those are usually pointers or floats, not ints
+		if abs < 1e9 {
+			conf := 0.40
+			if abs < 1_000_000 {
+				conf += 0.15
+			}
+			consider(guessResult{"i64", conf, fmt.Sprintf("(%d)", v)})
+		}
+	}
+
+	// Int32
+	if len(peekBytes) >= 4 {
+		v := int32(binary.LittleEndian.Uint32(peekBytes[:4]))
+		abs := v
+		if abs < 0 {
+			abs = -abs
+		}
+		conf := 0.45
+		if abs < 1_000_000 {
+			conf += 0.15
+		}
+		if abs <= 1000 {
+			conf += 0.05
+		}
+		consider(guessResult{"i32", conf, fmt.Sprintf("(%d)", v)})
+	}
+
+	// Int8 fallback (used only if nothing else hit)
+	if best.confidence < 0.3 && len(peekBytes) >= 1 {
+		v := int8(peekBytes[0])
+		consider(guessResult{"i8", 0.25, fmt.Sprintf("(%d)", v)})
+	}
+
+	return best
+}
+
 // cmdLook — dump memory around an address as a grid of the current data type.
 // Usage:
 //   look <addr>                       → 8 before + addr + 8 after
@@ -1105,7 +1241,11 @@ func cmdLook(args []string) {
 	totalBytes := totalEntries * sz
 	start := addr - uintptr(beforeCount*sz)
 
-	buf, err := ReadMemory(currentHandle, start, totalBytes)
+	// Read 8 extra bytes past the end so each row can peek forward into
+	// neighboring bytes for pointer/f64/i64 detection even when the current
+	// type is small (e.g. f32 = 4 bytes per row).
+	readBytes := totalBytes + 8
+	buf, err := ReadMemory(currentHandle, start, readBytes)
 	if err != nil || len(buf) < totalBytes {
 		fmt.Printf("Read failed at 0x%X (%d bytes): %v\n", start, totalBytes, err)
 		return
@@ -1113,19 +1253,33 @@ func cmdLook(args []string) {
 
 	fmt.Printf("Looking around 0x%X as %s (size=%d) — %d before, %d after:\n",
 		addr, dataTypeName(dt), sz, beforeCount, afterCount)
-	fmt.Printf("%-8s  %-20s  %s\n", "Offset", "Address", "Value")
-	fmt.Println(strings.Repeat("-", 50))
+	fmt.Printf("%-8s  %-20s  %-18s  %-7s  %s\n", "Offset", "Address", "Value", "Guess", "Conf.")
+	fmt.Println(strings.Repeat("-", 80))
 
 	for i := 0; i < totalEntries; i++ {
 		off := (i - beforeCount) * sz
 		entryAddr := start + uintptr(i*sz)
 		chunk := buf[i*sz : (i+1)*sz]
 		val := decodeValue(dt, chunk)
+
+		// Window for guessing: this entry's bytes + up to 8 bytes forward
+		peekStart := i * sz
+		peekEnd := peekStart + 8
+		if peekEnd > len(buf) {
+			peekEnd = len(buf)
+		}
+		g := guessType(buf[peekStart:peekEnd], currentHandle, currentIs32Bit)
+		guessLabel := g.name
+		if g.extra != "" {
+			guessLabel = g.name + " " + g.extra
+		}
+
 		marker := "  "
 		if off == 0 {
 			marker = "→ "
 		}
-		fmt.Printf("%s%+-7d 0x%-18X  %s\n", marker, off, entryAddr, val)
+		fmt.Printf("%s%+-7d 0x%-18X  %-18s  %-7s  %.2f\n",
+			marker, off, entryAddr, val, guessLabel, g.confidence)
 	}
 }
 
