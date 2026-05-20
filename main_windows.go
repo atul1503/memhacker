@@ -134,6 +134,9 @@ func main() {
 		case "read":
 			Log.Info("CMD: read %v", args)
 			cmdRead(args)
+		case "look", "l":
+			Log.Info("CMD: look %v", args)
+			cmdLook(args)
 		case "pmap":
 			Log.Info("CMD: pmap")
 			cmdBuildPointerMap()
@@ -247,6 +250,9 @@ SCANNING                        (default type: f32, default scope: writable priv
 
 VALUE OPS
   read <addr> [dt]              - read value at address
+  look <addr> [count]           - dump neighbors around addr as the current data type
+                                  (count = entries each side, default 8 → 17 rows)
+                                  e.g: look 0x614DD58       look hp 16
   write <addr> <value>          - write value at address
   iread <addr> <index>          - read at addr + index * sizeof(type)
                                   e.g: iread 0x1A2B3C 4  reads 4th element of f32 array
@@ -1005,6 +1011,69 @@ func cmdRead(args []string) {
 		return
 	}
 	fmt.Printf("0x%X = %s (%s)\n", addr, val, dataTypeName(dt))
+}
+
+// cmdLook — dump memory around an address as a grid of the current data type.
+// Usage: look <addr> [count]   count = entries on each side (default 8).
+func cmdLook(args []string) {
+	if currentHandle == 0 {
+		fmt.Println("Not attached")
+		return
+	}
+	if len(args) == 0 {
+		fmt.Println("Usage: look <addr> [count]   (count = entries each side; default 8)")
+		return
+	}
+	addr, err := resolveAddr(args[0])
+	if err != nil {
+		fmt.Println("Invalid address:", err)
+		return
+	}
+	count := 8
+	if len(args) > 1 {
+		if c, e := strconv.Atoi(args[1]); e == nil && c > 0 {
+			count = c
+		}
+	}
+	dt := currentDT
+	if dt == TypeBytes || dt == TypeString {
+		fmt.Println("look: bytes/string not supported here — set a fixed-size type (i8/u8/i16/u16/i32/u32/i64/u64/f32/f64) and retry.")
+		return
+	}
+	sz := dataTypeSize(dt)
+	totalEntries := 2*count + 1
+	totalBytes := totalEntries * sz
+	start := addr - uintptr(count*sz)
+
+	buf, err := ReadMemory(currentHandle, start, totalBytes)
+	if err != nil || len(buf) < totalBytes {
+		fmt.Printf("Read failed at 0x%X (%d bytes): %v\n", start, totalBytes, err)
+		return
+	}
+
+	fmt.Printf("Looking around 0x%X as %s (size=%d), ±%d entries:\n",
+		addr, dataTypeName(dt), sz, count)
+	fmt.Printf("%-8s  %-20s  %-20s  %s\n", "Offset", "Address", "Value", "Bytes")
+	fmt.Println(strings.Repeat("-", 70))
+
+	for i := 0; i < totalEntries; i++ {
+		off := (i - count) * sz
+		entryAddr := start + uintptr(i*sz)
+		chunk := buf[i*sz : (i+1)*sz]
+		val := decodeValue(dt, chunk)
+		hex := ""
+		for j, b := range chunk {
+			if j > 0 {
+				hex += " "
+			}
+			hex += fmt.Sprintf("%02X", b)
+		}
+		marker := "  "
+		if off == 0 {
+			marker = "→ "
+		}
+		fmt.Printf("%s%+-7d 0x%-18X  %-20s  %s\n", marker, off, entryAddr, val, hex)
+	}
 }
 
 func cmdFreeze(args []string) {
