@@ -293,17 +293,17 @@ VALUE OPS
   iwrite <idx> <value>          - write to scan result by index
                                   e.g: iwrite 5 100   iwrite 5-7 100   iwrite 1,3,5 100
   add <addr> [label]            - add to address list (uses current data type)
-  iadd <idx|range|list> [label] - add scan result(s) to address list by index
+  iadd <idx|range|list> [label] (alias ia) - add scan result(s) to address list by index
                                   e.g: iadd 1   iadd 1-3   iadd 1,3,5 hp
-  ladd <off> [<off2> ...]       - add offsets from last 'look' to address list
+  ladd <off> [<off2> ...]       (alias la) - add offsets from last 'look' to address list
                                   e.g: ladd +4   ladd -8 +4 +8   ladd +4 +8 -- stats
   addrlist | alist | al         - show address list with live values (1-based #)
-  aread <idx|range|list>        - read entries from address list (entry's own type)
+  aread <idx|range|list>        (alias ar)  - read entries from address list (entry's own type)
                                   e.g: aread 1   aread 1-3   aread 1,3,5
-  awrite <idx|range|list> <val> - write value to address list entries
+  awrite <idx|range|list> <val> (alias aw)  - write value to address list entries
                                   e.g: awrite 1 999   awrite 1-3 100
-  afreeze <idx|range|list> <val>- freeze address list entries at value
-  aremove <idx|range|list>      - drop entries from the list (1-based, highest first)
+  afreeze <idx|range|list> <val>(alias af)  - freeze address list entries at value
+  aremove <idx|range|list>      (alias arm) - drop entries from the list (1-based, highest first)
   aclear                        - remove all entries from the list
 
 FREEZING
