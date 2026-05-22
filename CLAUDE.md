@@ -278,8 +278,9 @@ Uses **semver** (MAJOR.MINOR.PATCH). AppVersion is in `logger.go`.
 | v2.7.0-alpha | Address list gets index ops: `aread` / `awrite` / `afreeze` / `aremove` / `aclear` (aliases `ar` / `aw` / `af` / `arm`). Each entry retains its captured data type. `addrlist` now displays 1-based indices to match the rest of the tool. |
 | v2.7.1-alpha | `alist` added as a third alias for `addrlist` — slots neatly with the rest of the `a*` family. |
 | v2.8.0-alpha | New ways to populate the address list: `iadd <idx>` adds scan results by index (alias `ia`); `ladd <offset>` adds offsets from the last `look` (alias `la`, accepts +/- decimal and hex, multiple in one go, optional `-- label` for a shared label). Removes the need to paste hex addresses by hand. |
+| v2.9.0-alpha | Tab-completion for file arguments at the main prompt. Pressing Tab on a partial filename auto-completes if there is exactly one match, or lists all matches if there are multiple. Only activates for commands that take file args: `pmload`, `pmsave`, `pmexport`, `prsave`, `prload`, `prmerge`. Case-sensitive. Implemented via Windows `ReadConsoleInputW` in raw mode — no external deps. |
 
-Current: **v2.8.0-alpha** (AppVersion in `logger.go`)
+Current: **v2.9.0-alpha** (AppVersion in `logger.go`)
 
 ---
 

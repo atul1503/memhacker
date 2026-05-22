@@ -1,4 +1,4 @@
-# MemHacker v2.8.0-alpha
+# MemHacker v2.9.0-alpha
 
 A Cheat Engine alternative written in Go — memory scanner, CE-style multi-session pointer scan, value freeze.
 

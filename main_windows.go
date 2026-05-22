@@ -78,8 +78,7 @@ func main() {
 	printBanner()
 
 	for {
-		fmt.Print("\n> ")
-		line, _ := reader.ReadString('\n')
+		line := ReadLine("\n> ")
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
