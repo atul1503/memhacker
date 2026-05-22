@@ -249,14 +249,14 @@ func printHelp() {
 	fmt.Println(`
 PROCESS
   ps / list                     - list running processes
-  open <pid|name>               - attach (partial name ok: open surro -> SurrounDead.exe)
-  close                         - detach
-  modules                       - list loaded DLLs (GAME/SYSTEM/OTHER)
-  regions [all]                 - list scannable memory regions with addresses/sizes
+  open <pid|name>               (alias: attach) - attach (partial name ok: open surro -> SurrounDead.exe)
+  close                         (alias: detach) - detach
+  modules                       (alias: mod) - list loaded DLLs (GAME/SYSTEM/OTHER)
+  regions [all]                 (alias: reg) - list scannable memory regions with addresses/sizes
 
 SCANNING                        (default type: f32, default scope: writable private memory)
-  type <dt>                     - set data type: i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 str bytes
-  scan <type> [value]           - first scan
+  type <dt>                     (alias: dt) - set data type: i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 str bytes
+  scan <type> [value]           (alias: s) - first scan
     types: exact  unknown  bigger  smaller  between <v1> <v2>
            changed  unchanged  increased  decreased  incby  decby  notequal
     keywords (append to any scan):
@@ -268,8 +268,8 @@ SCANNING                        (default type: f32, default scope: writable priv
          scan exact 0 cap 50000
          scan exact 100 range 0x1000000 0x2000000
          scan between -0.01 0.01 all
-  next <type> [value]           - filter existing results (same types as scan)
-  results [n] [addr|val]        - show top N results, optionally sorted by address or value
+  next <type> [value]           (alias: n) - filter existing results (same types as scan)
+  results [n] [addr|val]        (alias: r) - show top N results, optionally sorted by address or value
   results <range|list> [addr|val] - show specific results by index
     e.g: results 20 val         - top 20 sorted by value
          results 1-5            - show results #1 to #5
@@ -278,7 +278,7 @@ SCANNING                        (default type: f32, default scope: writable priv
 
 VALUE OPS
   read <addr> [dt]              - read value at address
-  look <addr> [count]           - dump neighbors around addr as the current data type
+  look <addr> [count]           (alias: l) - dump neighbors around addr as the current data type
                                   count = entries each side, default 8 (17 rows)
                                   asymmetric: before|b <n>, after|a <n> (or both)
                                   also shows a per-row Guess + Confidence
@@ -287,32 +287,32 @@ VALUE OPS
                                        look hp before 4 after 16
                                        look hp b 4 a 16     <- same, short form
                                        look hp a 32         <- only forward
-  write <addr> <value>          - write value at address
-  iread <addr> <index>          - read at addr + index * sizeof(type)
+  write <addr> <value>          (alias: w) - write value at address
+  iread <addr> <index>          (alias: ir) - read at addr + index * sizeof(type)
                                   e.g: iread 0x1A2B3C 4  reads 4th element of f32 array
-  iwrite <idx> <value>          - write to scan result by index
+  iwrite <idx> <value>          (alias: iw) - write to scan result by index
                                   e.g: iwrite 5 100   iwrite 5-7 100   iwrite 1,3,5 100
-  add <addr> [label]            - add to address list (uses current data type)
-  iadd <idx|range|list> [label] (alias ia) - add scan result(s) to address list by index
+  add <addr> [label]            (alias: a) - add to address list (uses current data type)
+  iadd <idx|range|list> [label] (alias: ia) - add scan result(s) to address list by index
                                   e.g: iadd 1   iadd 1-3   iadd 1,3,5 hp
-  ladd <off> [<off2> ...]       (alias la) - add offsets from last 'look' to address list
+  ladd <off> [<off2> ...]       (alias: la) - add offsets from last 'look' to address list
                                   e.g: ladd +4   ladd -8 +4 +8   ladd +4 +8 -- stats
   addrlist | alist | al         - show address list with live values (1-based #)
-  aread <idx|range|list>        (alias ar)  - read entries from address list (entry's own type)
+  aread <idx|range|list>        (alias: ar) - read entries from address list (entry's own type)
                                   e.g: aread 1   aread 1-3   aread 1,3,5
-  awrite <idx|range|list> <val> (alias aw)  - write value to address list entries
+  awrite <idx|range|list> <val> (alias: aw) - write value to address list entries
                                   e.g: awrite 1 999   awrite 1-3 100
-  afreeze <idx|range|list> <val>(alias af)  - freeze address list entries at value
-  aremove <idx|range|list>      (alias arm) - drop entries from the list (1-based, highest first)
+  afreeze <idx|range|list> <val>(alias: af) - freeze address list entries at value
+  aremove <idx|range|list>      (alias: arm) - drop entries from the list (1-based, highest first)
   aclear                        - remove all entries from the list
 
 FREEZING
-  freeze <addr> <value> [label] - freeze address at value (50ms write loop)
-  ifreeze <idx> <value>         - freeze scan result by index (range/list ok)
+  freeze <addr> <value> [label] (alias: f)  - freeze address at value (50ms write loop)
+  ifreeze <idx> <value>         (alias: if) - freeze scan result by index (range/list ok)
                                   e.g: ifreeze 5 100   ifreeze 5-7 100
-  unfreeze <pos|range|0xADDR>   - unfreeze by position in frozen list, range, or address
+  unfreeze <pos|range|0xADDR>   (alias: uf) - unfreeze by position in frozen list, range, or address
                                   e.g: unfreeze 1   unfreeze 1-3   unfreeze 0x1A2B3C
-  frozen                        - list frozen entries (positions 1,2,3... reset each time)
+  frozen                        (alias: fl) - list frozen entries (positions 1,2,3... reset each time)
 
 ALIASES
   alias <name> <addr>           - set alias  e.g: alias hp 0x614DD58
@@ -321,7 +321,7 @@ ALIASES
   (use alias name anywhere an address is expected: write hp 999  freeze hp 999)
 
 POINTER SCANNING
-  pmap                          - build pointer map (in-memory)
+  pmap                          - build pointer map (in-memory only, no file saved)
   pmsave <file> <addr>          - build pmap + save + register session
   pmadd <addr>                  - add another target to last session
   pmload <f1> [f2] [f3] ...    - load one or more saved pmaps
@@ -344,6 +344,7 @@ POINTER RESULTS
   prlabel <index> <label>       - label a chain
   prwrite <index> <value>       - follow chain, write value
   prfreeze <index> <value>      - follow chain, freeze value
+  prmerge <f1.json> <f2.json> ...- offline cross-session intersection (no game needed)
 
 OTHER
   log                           - show log file path

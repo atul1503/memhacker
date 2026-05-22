@@ -35,10 +35,10 @@ Cross-compile from macOS/Linux works fine.
 | Command | Description |
 |---------|-------------|
 | `ps` / `list` | List all running processes |
-| `open <pid\|name>` | Attach to process. Supports partial name match — `open surro` matches `SurrounDead.exe`. Auto-detects 32-bit WOW64 vs 64-bit |
-| `close` | Detach |
-| `modules` | List loaded DLLs — shows `GAME` / `SYSTEM` / `OTHER` tag |
-| `regions [all]` | List scannable memory regions with base/end/size. Default: writable private only. `regions all` shows everything |
+| `open <pid\|name>` (alias `attach`) | Attach to process. Supports partial name match — `open surro` matches `SurrounDead.exe`. Auto-detects 32-bit WOW64 vs 64-bit |
+| `close` (alias `detach`) | Detach |
+| `modules` (alias `mod`) | List loaded DLLs — shows `GAME` / `SYSTEM` / `OTHER` tag |
+| `regions [all]` (alias `reg`) | List scannable memory regions with base/end/size. Default: writable private only. `regions all` shows everything |
 
 ---
 
@@ -46,7 +46,7 @@ Cross-compile from macOS/Linux works fine.
 
 | Command | Description |
 |---------|-------------|
-| `type <dt>` | Set scan data type. Default: `f32` |
+| `type <dt>` (alias `dt`) | Set scan data type. Default: `f32` |
 
 Types: `i8` `i16` `i32` `i64` `u8` `u16` `u32` `u64` `f32` `f64` `str` `bytes`
 
@@ -58,7 +58,7 @@ Scans **writable private memory only** by default (game values are always here).
 
 | Command | Description |
 |---------|-------------|
-| `scan exact <val>` | Exact match. For f32/f64 uses ±1.0 tolerance automatically |
+| `scan exact <val>` (alias `s`) | Exact match. For f32/f64 uses ±1.0 tolerance automatically |
 | `scan unknown` | Snapshot all memory to disk — use `next changed/increased/decreased` to filter |
 | `scan bigger <val>` | Greater than |
 | `scan smaller <val>` | Less than |
@@ -70,8 +70,8 @@ Scans **writable private memory only** by default (game values are always here).
 | `scan incby <val>` | Increased by exactly this amount |
 | `scan decby <val>` | Decreased by exactly this amount |
 | `scan notequal <val>` | Not equal to value |
-| `next <type> [val]` | Filter existing results (same types as scan) |
-| `results [N]` | Show top N results with live values (default 20) |
+| `next <type> [val]` (alias `n`) | Filter existing results (same types as scan) |
+| `results [N]` (alias `r`) | Show top N results with live values (default 20) |
 | `reset` | Clear scan results |
 
 **Optional scan keywords** (append to any scan command):
@@ -95,11 +95,11 @@ scan exact 0 cap 500000                  <- stop after 500K results
 | Command | Description |
 |---------|-------------|
 | `read <addr> [type]` | Read live value at address |
-| `look <addr> [count]` | Dump neighbors around an address as the current data type. `count` = entries on each side (default 8 → 17 rows). Asymmetric forms: `look <addr> before <n>` (or `b <n>`), `look <addr> after <n>` (or `a <n>`), or both: `look <addr> b 4 a 16`. Output also includes a per-row **Guess** + **Confidence** (heuristic — f32 / f64 / i32 / i64 / i8 / ptr / zero) so you don't have to flip `type` to sniff what each field probably is. Useful for figuring out what fields sit at `+4`, `+8` etc. relative to a found value. |
-| `write <addr> <val>` | Write value to address |
-| `iread <addr> <index>` | Read at `addr + index × sizeof(type)`. e.g. `iread 0x1A2B3C 4` reads 4th element of array |
-| `iwrite <idx> <val>` | Write to scan result by index. Supports range/list: `iwrite 5 100` `iwrite 5-7 100` `iwrite 1,3,5 100` |
-| `add <addr> [label]` | Add address to address list (captures the current data type) |
+| `look <addr> [count]` (alias `l`) | Dump neighbors around an address as the current data type. `count` = entries on each side (default 8 → 17 rows). Asymmetric forms: `look <addr> before <n>` (or `b <n>`), `look <addr> after <n>` (or `a <n>`), or both: `look <addr> b 4 a 16`. Output also includes a per-row **Guess** + **Confidence** (heuristic — f32 / f64 / i32 / i64 / i8 / ptr / zero) so you don't have to flip `type` to sniff what each field probably is. Useful for figuring out what fields sit at `+4`, `+8` etc. relative to a found value. |
+| `write <addr> <val>` (alias `w`) | Write value to address |
+| `iread <addr> <index>` (alias `ir`) | Read at `addr + index × sizeof(type)`. e.g. `iread 0x1A2B3C 4` reads 4th element of array |
+| `iwrite <idx> <val>` (alias `iw`) | Write to scan result by index. Supports range/list: `iwrite 5 100` `iwrite 5-7 100` `iwrite 1,3,5 100` |
+| `add <addr> [label]` (alias `a`) | Add address to address list (captures the current data type) |
 | `iadd <idx\|range\|list> [label]` (alias `ia`) | Add **scan result(s)** to the address list by 1-based index. Each entry captures the current data type. `iadd 1`, `iadd 1-3`, `iadd 1,3,5 hp`. |
 | `ladd <off> [<off2> ...]` (alias `la`) | Add offsets from the **last `look`** to the address list. Offset is in bytes, signed. Accepts decimal (`+4`, `-8`) and hex (`0x10`, `+0x20`). Multiple offsets in one command. Optional shared label after `--`: `ladd +4 +8 -- stats`. |
 | `addrlist` (aliases `alist`, `al`) | Show address list with live values (1-based indices) |
@@ -115,10 +115,10 @@ scan exact 0 cap 500000                  <- stop after 500K results
 
 | Command | Description |
 |---------|-------------|
-| `freeze <addr> <val> [label]` | Freeze address at value (50ms write loop) |
-| `ifreeze <idx> <val>` | Freeze scan result by index. Supports range/list: `ifreeze 5 100` `ifreeze 5-7 100` |
-| `unfreeze <id\|range\|list>` | Unfreeze by ID. e.g. `unfreeze 3` `unfreeze 1-5` `unfreeze 1,3,5` |
-| `frozen` | List all frozen entries |
+| `freeze <addr> <val> [label]` (alias `f`) | Freeze address at value (50ms write loop) |
+| `ifreeze <idx> <val>` (alias `if`) | Freeze scan result by index. Supports range/list: `ifreeze 5 100` `ifreeze 5-7 100` |
+| `unfreeze <id\|range\|list>` (alias `uf`) | Unfreeze by ID. e.g. `unfreeze 3` `unfreeze 1-5` `unfreeze 1,3,5` |
+| `frozen` (alias `fl`) | List all frozen entries |
 
 ---
 
@@ -144,6 +144,7 @@ CE-style multi-session pointer scan. Find stable pointer chains that survive gam
 
 | Command | Description |
 |---------|-------------|
+| `pmap` | Build pointer map in memory only (no file saved). Use `pmsave` to also save + register. |
 | `pmsave <file> <addr>` | Build pointer map + save + register session |
 | `pmadd <addr>` | Add another address to the last session (CE-style: one pmap, multiple targets) |
 | `pmload <file> [file2] ...` | Load one or more saved pmaps. Multiple files at once: `pmload s1.pmap s2.pmap s3.pmap` |
